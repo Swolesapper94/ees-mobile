@@ -26,6 +26,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .loadingState h1 { margin: 24px 0 8px; font-size: 22px; }
 .loadingState p { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.5; }
 .loadingState button { min-height: 42px; margin-top: 12px; padding: 0 16px; border: 0; border-radius: 6px; background: var(--green); color: #fff; font-weight: 800; }
+.authForm { display: grid; gap: 12px; margin-top: 18px; }
+.authForm label { color: #344356; font-size: 12px; font-weight: 800; }
+.authForm input { width: 100%; height: 44px; margin-top: 6px; padding: 0 11px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
+.authForm > button { margin-top: 0; }
+.devIdentities { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.devIdentities span { grid-column: 1 / -1; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.devIdentities button { min-height: 36px; margin: 0; padding: 0 8px; border: 1px solid var(--line); background: #fff; color: var(--navy); font-size: 10px; }
 .stage { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 48px; padding: 32px 20px; }
 .phone { position: relative; width: 390px; height: 844px; overflow: hidden; border: 10px solid #111827; border-radius: 38px; background: var(--background); box-shadow: 0 20px 40px #00000029, 0 8px 16px #00000014; }
 .statusbar { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 10px 21px 0; background: var(--navy); color: #fff; font-size: 11px; font-weight: 800; }
@@ -142,6 +149,7 @@ select, input[type="date"] { height: 45px; padding: 0 11px; font-size: 12px; }
 .successIcon { display: grid; width: 65px; height: 65px; margin: 0 auto 22px; place-items: center; border-radius: 50%; background: var(--green); color: #fff; font-size: 32px; box-shadow: 0 8px 20px #1e735e38; }
 .success h1 { margin: 7px 0 13px; font-size: 25px; }
 .success > p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.success .submissionWarning { padding: 10px; border: 1px solid #f3d28c; border-radius: 6px; background: var(--gold-soft); color: #72520f; font-size: 11px; text-align: left; }
 .audit { display: flex; gap: 10px; margin: 25px 0 16px; padding: 13px; text-align: left; }
 .audit > span { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 8px; background: var(--blue-soft); color: var(--blue); }
 .audit strong, .audit small { display: block; }

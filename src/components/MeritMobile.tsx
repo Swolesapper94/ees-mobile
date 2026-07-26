@@ -11,6 +11,7 @@ import {
   leadershipDimensions,
 } from "../lib/contracts";
 import { eesGateway } from "../lib/ees-gateway";
+import { isMobileDemoMode, signInToMerit, useDevelopmentIdentity } from "../lib/auth";
 
 type Screen = "home" | "capture" | "evidence" | "success" | "record" | "detail";
 type CaptureLane = "SOLDIER_ENTRY" | "RATER_OBSERVATION";
@@ -65,6 +66,9 @@ export function MeritMobile() {
   const [feedbackType, setFeedbackType] = useState<ObservationFeedbackType>("NEUTRAL");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [submissionWarning, setSubmissionWarning] = useState("");
 
   const refresh = useCallback(async () => {
     const next = await eesGateway.bootstrap();
@@ -89,6 +93,7 @@ export function MeritMobile() {
   );
 
   function startCapture() {
+    if (!data?.supportForm) return;
     setCaptureLane("SOLDIER_ENTRY");
     setRaterTarget(null);
     setDraft(emptyDraft());
@@ -122,10 +127,12 @@ export function MeritMobile() {
     }
     setBusy(true);
     setError("");
+    setSubmissionWarning("");
     try {
-      const entry = await eesGateway.createEntry(draft);
+      const result = await eesGateway.createEntry(draft);
       await refresh();
-      setSelected(entry);
+      setSelected(result.entry);
+      setSubmissionWarning(result.uploadWarning ?? "");
       setScreen("success");
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "Submission failed.");
@@ -164,17 +171,57 @@ export function MeritMobile() {
     setScreen("detail");
   }
 
+  async function signIn() {
+    if (!authEmail.trim() || !authPassword) {
+      setError("Enter your MERIT email and password.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await signInToMerit(authEmail, authPassword);
+      setAuthPassword("");
+      await refresh();
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to sign in to MERIT.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function useDevIdentity(email: string) {
+    useDevelopmentIdentity(email);
+    setError("");
+    try {
+      await refresh();
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to establish the development session.");
+    }
+  }
+
   if (!data) {
     return (
       <main className="loading">
         {error ? (
           <div className="loadingState">
             <div className="brand"><img src="/army-star.jpg" alt="" /> MERIT</div>
-            <h1>Mobile capture is unavailable</h1>
+            <h1>{isMobileDemoMode ? "Mobile capture is unavailable" : "Sign in to MERIT Mobile"}</h1>
             <p>{error}</p>
-            <button onClick={() => { setError(""); void refresh().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load MERIT Mobile.")); }}>
-              Try again
-            </button>
+            {!isMobileDemoMode && (
+              <div className="authForm">
+                <label>Email<input type="email" autoComplete="username" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} /></label>
+                <label>Password<input type="password" autoComplete="current-password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void signIn(); }} /></label>
+                <button disabled={busy} onClick={() => void signIn()}>{busy ? "Signing in…" : "Sign in"}</button>
+                {import.meta.env.DEV && (
+                  <div className="devIdentities">
+                    <span>Local development identities</span>
+                    <button onClick={() => void useDevIdentity("james.davis@army.mil")}>SGT Davis · Soldier</button>
+                    <button onClick={() => void useDevIdentity("marcus.johnson@army.mil")}>SSG Johnson · Rater</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {isMobileDemoMode && <button onClick={() => { setError(""); void refresh().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load MERIT Mobile.")); }}>Try again</button>}
           </div>
         ) : "Loading MERIT Mobile…"}
       </main>
@@ -197,20 +244,24 @@ export function MeritMobile() {
               <div className="brand"><img src="/army-star.jpg" alt="" /> MERIT</div>
               <p className="eyebrow">SUPPORT FORM · FY26</p>
               <h1>Good afternoon,<br />{data.user.rank} {data.user.displayName.split(" ")[1]}.</h1>
-              <p>Capture performance now. Your rater reviews it in MERIT.</p>
+              <p>{data.supportForm ? "Capture performance now. Your rater reviews it in MERIT." : "Record direct observations for the Soldiers you rate."}</p>
             </header>
             <div className="content overlap">
-              <button className="captureCta" onClick={startCapture}>
-                <span className="plus">＋</span>
-                <span><strong>Capture accomplishment</strong><small>Log it now. Keep the proof.</small></span>
-                <b>→</b>
-              </button>
+              {data.supportForm && (
+                <>
+                  <button className="captureCta" onClick={startCapture}>
+                    <span className="plus">＋</span>
+                    <span><strong>Capture accomplishment</strong><small>Log it now. Keep the proof.</small></span>
+                    <b>→</b>
+                  </button>
 
-              <div className="authorityStrip">
-                <span>Rated Soldier lane</span>
-                <strong>Rater review required</strong>
-                <p>Your submission is self-reported evidence until an authorized rating official reviews it.</p>
-              </div>
+                  <div className="authorityStrip">
+                    <span>Rated Soldier lane</span>
+                    <strong>Rater review required</strong>
+                    <p>Your submission is self-reported evidence until an authorized rating official reviews it.</p>
+                  </div>
+                </>
+              )}
 
               {data.raterAssignments.length > 0 && (
                 <section className="leaderCapture">
@@ -228,7 +279,7 @@ export function MeritMobile() {
                 </section>
               )}
 
-              <article className="card readiness">
+              {data.supportForm && <article className="card readiness">
                 <div className="row">
                   <div><p className="eyebrow dark">EVALUATION READINESS</p><h2>{activeDimensions} of 6 dimensions active</h2></div>
                   <strong className="score">{Math.round((activeDimensions / 6) * 100)}%</strong>
@@ -242,21 +293,21 @@ export function MeritMobile() {
                   ))}
                 </div>
                 <button className="linkButton" onClick={() => setScreen("record")}>View performance record →</button>
-              </article>
+              </article>}
 
-              <section className="section">
+              {data.supportForm && <section className="section">
                 <div className="row"><h2>Awaiting rater review</h2><button className="textButton" onClick={() => setScreen("record")}>See all</button></div>
                 {pending.length ? pending.slice(0, 2).map((entry) => (
                   <EntryRow key={entry.id} entry={entry} onOpen={() => openEntry(entry)} />
                 )) : <p className="empty">No entries awaiting review.</p>}
-              </section>
+              </section>}
 
-              <section className="section">
+              {data.supportForm && <section className="section">
                 <h2>Recent activity</h2>
                 {data.entries.filter((entry) => entry.confirmationStatus !== "UNREVIEWED").slice(0, 2).map((entry) => (
                   <EntryRow key={entry.id} entry={entry} onOpen={() => openEntry(entry)} />
                 ))}
-              </section>
+              </section>}
             </div>
           </div>
         )}
@@ -342,8 +393,8 @@ export function MeritMobile() {
             <div className="content">
               <div className="notice"><b>i</b><span>Evidence is optional. It supports leader review, but it does not determine a rating.</span></div>
               <label className="upload" htmlFor="evidenceFile">
-                <span>↑</span><strong>Attach proof</strong><small>Photo, certificate, score sheet, or document</small>
-                <input id="evidenceFile" type="file" accept="image/*,.pdf,.doc,.docx" onChange={chooseFile} />
+                <span>↑</span><strong>Attach proof</strong><small>JPEG, PNG, WEBP, or PDF · up to 20 MB</small>
+                <input id="evidenceFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFile} />
               </label>
               <div className="uploadOptions">
                 <label className="secondary" htmlFor="cameraFile">◎ Take photo</label>
@@ -400,6 +451,7 @@ export function MeritMobile() {
               <p>{captureLane === "RATER_OBSERVATION"
                 ? `Your observation about ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? "the Soldier"} remains private until discussed and released through counseling.`
                 : "Your accomplishment is self-reported evidence awaiting rater review. The rater can confirm it, request clarification, or mark it not used."}</p>
+              {submissionWarning && <p className="submissionWarning">{submissionWarning}</p>}
               <div className="card audit"><span>⌁</span><div><strong>{captureLane === "RATER_OBSERVATION" ? "Rater-owned record created" : "Evidence trail created"}</strong><small>{captureLane === "RATER_OBSERVATION" ? "Private until counseling release" : `Submitted by ${selected?.submittedBy ?? "you"}`}</small></div></div>
               {selected && <button className="secondaryWide" onClick={() => openEntry(selected)}>View submitted entry</button>}
             </div>
@@ -409,14 +461,14 @@ export function MeritMobile() {
 
         {screen === "record" && (
           <div className="screen">
-            <Subhead eyebrow={data.supportForm.label.toUpperCase()} title="Performance record" onBack={() => setScreen("home")} />
+            <Subhead eyebrow={(data.supportForm?.label ?? "MERIT").toUpperCase()} title="Performance record" onBack={() => setScreen("home")} />
             <div className="content">
               <div className="card summary">
                 <div><strong>{data.entries.length}</strong><span>Entries</span></div>
                 <div><strong>{pending.length}</strong><span>Awaiting review</span></div>
                 <div><strong>{data.entries.filter((entry) => entry.confirmationStatus === "CONFIRMED").length}</strong><span>Confirmed</span></div>
               </div>
-              <p className="period">{data.supportForm.ratingPeriod}</p>
+              <p className="period">{data.supportForm?.ratingPeriod ?? "No personal support form"}</p>
               <div className="timeline">
                 {data.entries.map((entry) => (
                   <EntryRow key={entry.id} entry={entry} onOpen={() => openEntry(entry)} />

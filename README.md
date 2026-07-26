@@ -50,13 +50,15 @@ to the MERIT platform while demo mode is enabled.
 
 ## Connect it to MERIT
 
-1. Deploy the mobile app under the same origin as MERIT web so its Supabase
-   browser session is shared.
+1. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the same public
+   Supabase project settings used by MERIT web. Mobile establishes and refreshes
+   its own session, so it may be deployed on a separate origin.
 2. Set `VITE_EES_API_URL` to the existing Express backend and include the
    mobile origin in the backend CORS configuration (`http://localhost:5173`
    for local development).
-3. Set `VITE_SUPABASE_URL` to the same Supabase project used by MERIT web.
-4. Set `VITE_EES_DEMO_MODE=false`.
+3. Run `npm run storage:ensure` in `ees2-backend` once per environment to
+   provision the artifact bucket used by evidence uploads.
+4. Set `VITE_EES_DEMO_MODE=false` and sign in through MERIT Mobile.
 5. Verify that a mobile-created entry appears in the existing desktop rater
    workspace and that caption failure never removes the underlying artifact.
 
@@ -65,6 +67,10 @@ Production mode already maps the existing authenticated routes in
 `ACCOMPLISHMENT` creation, multipart artifact upload, assigned-rater discovery,
 and rater observation creation. It does not create a parallel mobile-only
 backend contract.
+
+During local development, the sign-in screen also offers Davis and Johnson
+development identities. Those shortcuts use the backend's development-only
+auth shim and are absent from production builds.
 
 See `docs/BACKEND-HANDOFF.md` for the schema mapping, state model, and security
 boundaries.

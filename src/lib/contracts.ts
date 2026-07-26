@@ -94,7 +94,7 @@ export interface MobileBootstrap {
     id: string;
     label: string;
     ratingPeriod: string;
-  };
+  } | null;
   goals: Array<{ id: string; title: string }>;
   entries: PerformanceEntry[];
   raterAssignments: RaterAssignment[];

@@ -7,6 +7,7 @@ import {
   PerformanceEntry,
   RaterAssignment,
 } from "./contracts";
+import { getMeritAccessToken } from "./auth";
 
 const STORE_KEY = "ees-mobile-demo-v1";
 const API_URL = import.meta.env.VITE_EES_API_URL || "http://localhost:4000";
@@ -122,7 +123,7 @@ function readDemoBootstrap(): MobileBootstrap {
       ...baseBootstrap,
       ...stored,
       user: { ...baseBootstrap.user, ...stored.user },
-      supportForm: { ...baseBootstrap.supportForm, ...stored.supportForm },
+      supportForm: stored.supportForm === null ? null : { ...baseBootstrap.supportForm!, ...stored.supportForm },
       goals: stored.goals ?? baseBootstrap.goals,
       entries: stored.entries ?? baseBootstrap.entries,
       raterAssignments: stored.raterAssignments ?? [],
@@ -146,6 +147,7 @@ function inferArtifactType(file: File): ArtifactType {
 
 async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
   const data = readDemoBootstrap();
+  if (!data.supportForm) throw new Error("No active personal support form is available.");
   const now = new Date().toISOString();
   const artifact = draft.artifact
     ? {
@@ -206,7 +208,7 @@ async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
 
 export interface EesGateway {
   bootstrap(): Promise<MobileBootstrap>;
-  createEntry(draft: CaptureDraft): Promise<PerformanceEntry>;
+  createEntry(draft: CaptureDraft): Promise<{ entry: PerformanceEntry; uploadWarning?: string }>;
   createObservation(draft: ObservationDraft): Promise<void>;
 }
 
@@ -215,36 +217,24 @@ const demoGateway: EesGateway = {
     return readDemoBootstrap();
   },
   async createEntry(draft) {
-    return createDemoEntry(draft);
+    return { entry: await createDemoEntry(draft) };
   },
   async createObservation() {
     throw new Error("This demo identity is a rated Soldier. Sign in as an assigned rater to record leader observations.");
   },
 };
 
-function sharedAuthHeader(): Record<string, string> {
+async function sharedAuthHeader(): Promise<Record<string, string>> {
   const devAuth = localStorage.getItem("devAuth");
   if (devAuth) return { Authorization: devAuth };
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  if (supabaseUrl) {
-    const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
-    const rawSession = localStorage.getItem(`sb-${projectRef}-auth-token`);
-    if (rawSession) {
-      try {
-        const stored = JSON.parse(rawSession) as { access_token?: string };
-        if (stored.access_token) return { Authorization: `Bearer ${stored.access_token}` };
-      } catch {
-        // Invalid session data is handled by the sign-in error below.
-      }
-    }
-  }
+  const accessToken = await getMeritAccessToken();
+  if (accessToken) return { Authorization: `Bearer ${accessToken}` };
   throw new Error("Your MERIT session is unavailable. Sign in again to continue.");
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  Object.entries(sharedAuthHeader()).forEach(([key, value]) => headers.set(key, value));
+  Object.entries(await sharedAuthHeader()).forEach(([key, value]) => headers.set(key, value));
   if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const response = await fetch(`${API_URL}/api${path}`, { ...init, headers });
   if (!response.ok) {
@@ -309,8 +299,7 @@ const apiGateway: EesGateway = {
       request<ApiRaterEvaluation[]>("/evaluations?role=rater"),
     ]);
     const form = forms[0];
-    if (!form) throw new Error("No active MERIT support form is assigned to you.");
-    const goals = await request<ApiGoal[]>(`/support-forms/${form.id}/goals`);
+    const goals = form ? await request<ApiGoal[]>(`/support-forms/${form.id}/goals`) : [];
     const uniqueAssignments = new Map<string, ApiRaterEvaluation>();
     for (const evaluation of raterEvaluations) {
       if (evaluation.supportFormId && evaluation.ratingChain?.ratedSoldier) {
@@ -330,16 +319,19 @@ const apiGateway: EesGateway = {
         };
       }),
     );
+    if (!form && raterAssignments.length === 0) {
+      throw new Error("No active support form or assigned Soldier workload is available.");
+    }
     const displayName = `${user.firstName} ${user.lastName}`;
     return {
       user: { id: user.id, displayName, rank: user.rank },
-      supportForm: {
+      supportForm: form ? {
         id: form.id,
         label: "Active support form",
         ratingPeriod: displayPeriod(form.ratingPeriodStart, form.ratingPeriodEnd),
-      },
+      } : null,
       goals: goals.map(({ id, title }) => ({ id, title })),
-      entries: form.entries.map((entry) => mapEntry(entry, `${user.rank} ${displayName}`)),
+      entries: form ? form.entries.map((entry) => mapEntry(entry, `${user.rank} ${displayName}`)) : [],
       raterAssignments,
     };
   },
@@ -358,6 +350,7 @@ const apiGateway: EesGateway = {
       }),
     });
 
+    let uploadWarning: string | undefined;
     if (draft.artifact) {
       const upload = new FormData();
       upload.set("file", draft.artifact);
@@ -370,13 +363,13 @@ const apiGateway: EesGateway = {
           body: upload,
         });
       } catch {
-        throw new Error("The accomplishment was saved in MERIT, but its evidence upload failed. Open the performance record before retrying the evidence.");
+        uploadWarning = "The accomplishment was saved, but its evidence upload failed. Add the evidence from the full MERIT support-form workspace.";
       }
     }
 
     const refreshed = await request<ApiSupportForm>(`/support-forms/${form.id}`);
     const entry = refreshed.entries.find((item) => item.id === created.id) ?? created;
-    return mapEntry(entry, "You");
+    return { entry: mapEntry(entry, "You"), uploadWarning };
   },
   async createObservation(draft) {
     await request(`/support-forms/${draft.supportFormId}/observations`, {

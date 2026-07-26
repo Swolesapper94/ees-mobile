@@ -71,10 +71,11 @@ Production mode maps these methods to the existing authenticated backend routes:
 - `GET /api/evaluations?role=rater`
 - `POST /api/support-forms/:formId/observations`
 
-The app reuses the standard Supabase browser session and the existing `devAuth`
-header in development. It must be served under the same origin as MERIT web to
-share browser session storage; a separate-origin deployment needs its own
-Supabase sign-in shell rather than copying tokens between origins.
+The app establishes its own Supabase browser session through the same project
+used by MERIT web, persists only access/refresh tokens in its own origin, and
+refreshes the access token before API calls. Development mode may instead use
+the backend's existing `devAuth` shim. The browser receives only the public
+Supabase URL/anon key and never a service-role credential.
 
 The likely production implementation will perform entry creation and binary
 upload as separate requests. Preserve failure states explicitly:
