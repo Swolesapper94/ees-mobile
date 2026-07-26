@@ -1,0 +1,10 @@
+{
+  "name": "MERIT Mobile",
+  "short_name": "MERIT",
+  "description": "Performance and evidence capture for MERIT",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f0",
+  "theme_color": "#1e3a2a",
+  "orientation": "portrait"
+}
