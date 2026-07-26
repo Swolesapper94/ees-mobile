@@ -1,4 +1,8 @@
 const AUTH_STORE_KEY = "merit-mobile-auth";
+const DEVELOPMENT_IDENTITIES = new Set([
+  "james.davis@army.mil",
+  "marcus.johnson@army.mil",
+]);
 
 interface SupabaseUser {
   id: string;
@@ -61,7 +65,12 @@ async function tokenRequest(grantType: "password" | "refresh_token", body: Recor
 }
 
 export async function signInToMerit(email: string, password: string): Promise<void> {
-  await tokenRequest("password", { email: email.trim(), password });
+  const normalizedEmail = email.trim().toLowerCase();
+  if (import.meta.env.DEV && password === "testpass" && DEVELOPMENT_IDENTITIES.has(normalizedEmail)) {
+    useDevelopmentIdentity(normalizedEmail);
+    return;
+  }
+  await tokenRequest("password", { email: normalizedEmail, password });
 }
 
 export async function getMeritAccessToken(): Promise<string | null> {

@@ -209,12 +209,13 @@ export function MeritMobile() {
             <p>{error}</p>
             {!isMobileDemoMode && (
               <div className="authForm">
+                <p className="authHint">Use a MERIT account. Local development also accepts Davis or Johnson with password <code>testpass</code>.</p>
                 <label>Email<input type="email" autoComplete="username" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} /></label>
                 <label>Password<input type="password" autoComplete="current-password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void signIn(); }} /></label>
                 <button disabled={busy} onClick={() => void signIn()}>{busy ? "Signing in…" : "Sign in"}</button>
                 {import.meta.env.DEV && (
                   <div className="devIdentities">
-                    <span>Local development identities</span>
+                    <span>Or choose a local development identity</span>
                     <button onClick={() => void useDevIdentity("james.davis@army.mil")}>SGT Davis · Soldier</button>
                     <button onClick={() => void useDevIdentity("marcus.johnson@army.mil")}>SSG Johnson · Rater</button>
                   </div>

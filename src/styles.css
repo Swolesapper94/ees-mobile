@@ -27,6 +27,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .loadingState p { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.5; }
 .loadingState button { min-height: 42px; margin-top: 12px; padding: 0 16px; border: 0; border-radius: 6px; background: var(--green); color: #fff; font-weight: 800; }
 .authForm { display: grid; gap: 12px; margin-top: 18px; }
+.authForm .authHint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.authForm .authHint code { color: var(--navy); font-size: 10px; font-weight: 800; }
 .authForm label { color: #344356; font-size: 12px; font-weight: 800; }
 .authForm input { width: 100%; height: 44px; margin-top: 6px; padding: 0 11px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
 .authForm > button { margin-top: 0; }
