@@ -38,6 +38,22 @@ export interface EvidenceArtifact {
   flagNote?: string;
 }
 
+export interface DraftArtifact {
+  id: string;
+  file: File;
+  type: ArtifactType;
+}
+
+export type SubmissionState =
+  | "IDLE"
+  | "SAVING_ENTRY"
+  | "UPLOADING_EVIDENCE"
+  | "EVIDENCE_SECURED"
+  | "ANALYZING_EVIDENCE"
+  | "ANALYSIS_COMPLETE"
+  | "UPLOAD_FAILED"
+  | "ANALYSIS_FAILED";
+
 export interface PerformanceEntry {
   id: string;
   supportFormId: string;
@@ -51,15 +67,17 @@ export interface PerformanceEntry {
   artifacts: EvidenceArtifact[];
   createdAt: string;
   submittedBy: string;
+  usedInEvalId?: string;
+  withdrawnAt?: string;
 }
 
 export interface CaptureDraft {
+  clientRequestId: string;
   rawText: string;
   section: LeadershipDimension;
   goalId?: string;
   eventDate: string;
-  artifact?: File;
-  artifactType?: ArtifactType;
+  artifacts: DraftArtifact[];
   flaggedByServiceMember: boolean;
   flagNote?: string;
   attested: boolean;
@@ -94,8 +112,12 @@ export interface MobileBootstrap {
     id: string;
     label: string;
     ratingPeriod: string;
+    ratingPeriodStart: string;
+    ratingPeriodEnd: string;
+    status: string;
+    goalsEstablishedDimensions: LeadershipDimension[];
   } | null;
-  goals: Array<{ id: string; title: string }>;
+  goals: Array<{ id: string; title: string; sectionKey: LeadershipDimension }>;
   entries: PerformanceEntry[];
   raterAssignments: RaterAssignment[];
 }

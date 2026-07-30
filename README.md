@@ -39,9 +39,9 @@ the **Take photo** action opens the rear camera where the browser supports it.
 
 The default demo mode is self-contained:
 
-- structured entries persist in browser local storage;
+- unfinished drafts, including selected evidence blobs, persist in IndexedDB;
 - image/PDF selection is real;
-- the evidence record appears immediately as `Processing`;
+- upload and AI analysis use separate, explicit states;
 - a clearly marked demo caption completes asynchronously;
 - the performance-record timeline updates from the same client-side store.
 
@@ -62,6 +62,16 @@ to the MERIT platform while demo mode is enabled.
 5. Verify that a mobile-created entry appears in the existing desktop rater
    workspace and that caption failure never removes the underlying artifact.
 
+For the local Davis/Johnson acceptance route:
+
+```bash
+cd ../ees2-backend
+node scripts/with-node22.mjs ./node_modules/.bin/tsx scripts/seed-mobile-demo.ts
+
+cd ../ees2-frontend
+./node_modules/.bin/playwright test tests/e2e/14-mobile-rater-loop.spec.ts --project=chromium
+```
+
 Production mode already maps the existing authenticated routes in
 `src/lib/ees-gateway.ts`: active support-form lookup, goal lookup,
 `ACCOMPLISHMENT` creation, multipart artifact upload, assigned-rater discovery,
@@ -77,12 +87,25 @@ boundaries.
 
 ## MVP screens
 
-1. Home / readiness
+1. Home / support-form status and goal-based readiness
 2. Accomplishment details
-3. Evidence attachment and attestation
-4. Submission confirmation
+3. Up-to-three classified evidence attachments and attestation
+4. Separate entry-save, evidence-upload, and analysis states
 5. Performance record
 6. Entry/evidence detail
+7. Clarification note, correction, replacement evidence, and resubmission
+
+## Entry and evidence policy
+
+- Event dates must be within the active rating period and cannot be future-dated.
+- Goals come only from the active support form and are filtered by leadership dimension.
+- A discrepancy requires attached evidence and a written explanation.
+- JPEG, PNG, WEBP, HEIC/HEIF (when browser-decodable), and PDF are accepted; images are rotated, resized, re-encoded as JPEG, and stripped of metadata before upload.
+- Entry creation is idempotent and guarded against double taps. Upload failure never removes the saved entry; analysis failure never removes secured evidence.
+- Soldier entries are editable or withdrawable only while unreviewed. Clarification corrections increment the source version and preserve the original submission in audit history. Evidence used in an evaluation is locked.
+- Artifact removal deletes the active database link but retains the storage object URL and caption snapshot in the immutable audit record pending a production retention schedule.
+
+Before photo capture, the app warns against classified information, controlled operational material, medical records, and unnecessary personal information. This prototype is not accredited for live personnel data.
 
 ## Intentionally deferred
 

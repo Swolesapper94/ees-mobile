@@ -1,11 +1,13 @@
 import {
   ArtifactType,
   CaptureDraft,
+  DraftArtifact,
   EvidenceArtifact,
   MobileBootstrap,
   ObservationDraft,
   PerformanceEntry,
   RaterAssignment,
+  SubmissionState,
 } from "./contracts";
 import { getMeritAccessToken } from "./auth";
 
@@ -41,18 +43,27 @@ interface ApiEntry {
   artifacts?: ApiArtifact[];
   createdAt: string;
   createdByUser?: { firstName: string; lastName: string; rank: string } | null;
+  goalLinks?: Array<{ goal: { id: string } }>;
+  usedInEvalId?: string | null;
+  withdrawnAt?: string | null;
 }
 
 interface ApiSupportForm {
   id: string;
   ratingPeriodStart: string;
   ratingPeriodEnd: string;
+  status: string;
   entries: ApiEntry[];
 }
 
 interface ApiGoal {
   id: string;
   title: string;
+  sectionKey: PerformanceEntry["section"];
+}
+
+interface ApiCompleteness {
+  goalCountsByDimension: Record<PerformanceEntry["section"], number>;
 }
 
 interface ApiRaterEvaluation {
@@ -98,15 +109,21 @@ const baseBootstrap: MobileBootstrap = {
     id: "test-sf-davis-2026",
     label: "FY26 Support Form",
     ratingPeriod: "01 SEP 2025 – 31 AUG 2026",
+    ratingPeriodStart: "2025-09-01",
+    ratingPeriodEnd: "2026-08-31",
+    status: "ACTIVE",
+    goalsEstablishedDimensions: ["LEADS", "DEVELOPS"],
   },
   goals: [
     {
       id: "goal-readiness",
       title: "Improve platoon training readiness and accountability",
+      sectionKey: "LEADS",
     },
     {
       id: "goal-development",
       title: "Develop junior Soldiers through monthly coaching",
+      sectionKey: "DEVELOPS",
     },
   ],
   entries: [seedEntry],
@@ -137,33 +154,23 @@ function writeDemoBootstrap(data: MobileBootstrap) {
   window.localStorage.setItem(STORE_KEY, JSON.stringify(data));
 }
 
-function inferArtifactType(file: File): ArtifactType {
-  if (file.type.startsWith("image/")) return "PHOTO";
-  if (/score|acft|range/i.test(file.name)) return "SCORE_SHEET";
-  if (/cert|award/i.test(file.name)) return "CERTIFICATE";
-  if (file.type === "application/pdf") return "DOCUMENT";
-  return "OTHER";
-}
-
 async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
   const data = readDemoBootstrap();
   if (!data.supportForm) throw new Error("No active personal support form is available.");
   const now = new Date().toISOString();
-  const artifact = draft.artifact
-    ? {
+  const artifacts = draft.artifacts.map(({ file, type }) => ({
         id: crypto.randomUUID(),
-        name: draft.artifact.name,
-        type: draft.artifactType ?? inferArtifactType(draft.artifact),
-        mimeType: draft.artifact.type || "application/octet-stream",
-        size: draft.artifact.size,
-        previewUrl: draft.artifact.type.startsWith("image/")
-          ? URL.createObjectURL(draft.artifact)
+        name: file.name,
+        type,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        previewUrl: file.type.startsWith("image/")
+          ? URL.createObjectURL(file)
           : undefined,
         aiCaptionStatus: "PENDING" as const,
         flaggedByServiceMember: draft.flaggedByServiceMember,
         flagNote: draft.flagNote,
-      }
-    : undefined;
+      }));
 
   const entry: PerformanceEntry = {
     id: crypto.randomUUID(),
@@ -174,7 +181,7 @@ async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
     rawText: draft.rawText,
     goalId: draft.goalId || undefined,
     confirmationStatus: "UNREVIEWED",
-    artifacts: artifact ? [artifact] : [],
+    artifacts,
     createdAt: now,
     submittedBy: `${data.user.rank} ${data.user.displayName}`,
   };
@@ -184,22 +191,19 @@ async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
 
   // Simulate asynchronous caption completion while preserving the immediate
   // "PENDING" record behavior expected from the real MERIT pipeline.
-  if (artifact) {
+  if (artifacts.length) {
     window.setTimeout(() => {
       const latest = readDemoBootstrap();
       const stored = latest.entries.find((item) => item.id === entry.id);
-      const storedArtifact = stored?.artifacts.find(
-        (item) => item.id === artifact.id,
-      );
-      if (storedArtifact) {
+      for (const storedArtifact of stored?.artifacts ?? []) {
         storedArtifact.aiCaptionStatus = "COMPLETE";
         storedArtifact.aiCaption =
-          `${artifact.type.replace("_", " ").toLowerCase()} uploaded for ` +
+          `${storedArtifact.type.replace("_", " ").toLowerCase()} uploaded for ` +
           `${draft.section.toLowerCase()} accomplishment review. ` +
           "Demo caption only; production MERIT performs factual extraction through the evidence service.";
-        writeDemoBootstrap(latest);
-        window.dispatchEvent(new Event("ees-demo-updated"));
       }
+      writeDemoBootstrap(latest);
+      window.dispatchEvent(new Event("ees-demo-updated"));
     }, 2200);
   }
 
@@ -208,7 +212,10 @@ async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
 
 export interface EesGateway {
   bootstrap(): Promise<MobileBootstrap>;
-  createEntry(draft: CaptureDraft): Promise<{ entry: PerformanceEntry; uploadWarning?: string }>;
+  createEntry(draft: CaptureDraft, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; uploadWarning?: string; failedArtifacts?: DraftArtifact[] }>;
+  retryEvidence(entry: PerformanceEntry, draft: CaptureDraft, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; failedArtifacts: DraftArtifact[] }>;
+  resubmitClarification(entry: PerformanceEntry, draft: CaptureDraft, response: string, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; failedArtifacts: DraftArtifact[] }>;
+  withdrawEntry(entry: PerformanceEntry, reason?: string): Promise<void>;
   createObservation(draft: ObservationDraft): Promise<void>;
 }
 
@@ -216,8 +223,37 @@ const demoGateway: EesGateway = {
   async bootstrap() {
     return readDemoBootstrap();
   },
-  async createEntry(draft) {
+  async createEntry(draft, onState) {
+    onState?.("SAVING_ENTRY");
+    if (draft.artifacts.length) onState?.("UPLOADING_EVIDENCE");
+    onState?.(draft.artifacts.length ? "ANALYZING_EVIDENCE" : "ANALYSIS_COMPLETE");
     return { entry: await createDemoEntry(draft) };
+  },
+  async retryEvidence(entry, _draft, onState) {
+    onState?.("UPLOADING_EVIDENCE");
+    onState?.("ANALYZING_EVIDENCE");
+    return { entry, failedArtifacts: [] };
+  },
+  async resubmitClarification(entry, draft, _response, onState) {
+    onState?.("SAVING_ENTRY");
+    const data = readDemoBootstrap();
+    const stored = data.entries.find((item) => item.id === entry.id);
+    if (!stored) throw new Error("Entry not found.");
+    stored.rawText = draft.rawText.trim();
+    stored.confirmationStatus = "UNREVIEWED";
+    stored.artifacts.push(...draft.artifacts.map(({ file, type }) => ({
+      id: crypto.randomUUID(), name: file.name, type, mimeType: file.type, size: file.size,
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+      aiCaptionStatus: "PENDING" as const, flaggedByServiceMember: draft.flaggedByServiceMember, flagNote: draft.flagNote,
+    })));
+    writeDemoBootstrap(data);
+    onState?.(draft.artifacts.length ? "ANALYZING_EVIDENCE" : "ANALYSIS_COMPLETE");
+    return { entry: stored, failedArtifacts: [] };
+  },
+  async withdrawEntry(entry) {
+    const data = readDemoBootstrap();
+    data.entries = data.entries.filter((item) => item.id !== entry.id);
+    writeDemoBootstrap(data);
   },
   async createObservation() {
     throw new Error("This demo identity is a rated Soldier. Sign in as an assigned rater to record leader observations.");
@@ -234,6 +270,7 @@ async function sharedAuthHeader(): Promise<Record<string, string>> {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  headers.set("X-MERIT-CLIENT", "mobile");
   Object.entries(await sharedAuthHeader()).forEach(([key, value]) => headers.set(key, value));
   if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const response = await fetch(`${API_URL}/api${path}`, { ...init, headers });
@@ -283,12 +320,53 @@ function mapEntry(entry: ApiEntry, fallbackAuthor: string): PerformanceEntry {
     section: entry.section,
     entryType: "ACCOMPLISHMENT",
     rawText: entry.rawText,
+    goalId: entry.goalLinks?.[0]?.goal.id,
     confirmationStatus: entry.confirmationStatus,
     clarificationNote: entry.clarificationNote ?? undefined,
     artifacts: (entry.artifacts ?? []).map(mapArtifact),
     createdAt: entry.createdAt,
     submittedBy: author,
+    usedInEvalId: entry.usedInEvalId ?? undefined,
+    withdrawnAt: entry.withdrawnAt ?? undefined,
   };
+}
+
+async function uploadArtifacts(
+  formId: string,
+  entryId: string,
+  draft: CaptureDraft,
+  onState?: (state: SubmissionState) => void,
+): Promise<{ uploadedIds: string[]; failedArtifacts: DraftArtifact[] }> {
+  if (!draft.artifacts.length) {
+    onState?.("ANALYSIS_COMPLETE");
+    return { uploadedIds: [], failedArtifacts: [] };
+  }
+  onState?.("UPLOADING_EVIDENCE");
+  const uploadedIds: string[] = [];
+  const failedArtifacts: DraftArtifact[] = [];
+  for (const artifact of draft.artifacts) {
+    const upload = new FormData();
+    upload.set("file", artifact.file);
+    upload.set("type", artifact.type);
+    upload.set("flaggedByServiceMember", String(draft.flaggedByServiceMember));
+    if (draft.flagNote) upload.set("flagNote", draft.flagNote);
+    try {
+      const created = await request<ApiArtifact>(`/support-forms/${formId}/entries/${entryId}/artifacts`, {
+        method: "POST",
+        body: upload,
+      });
+      uploadedIds.push(created.id);
+    } catch {
+      failedArtifacts.push(artifact);
+    }
+  }
+  if (failedArtifacts.length) {
+    onState?.("UPLOAD_FAILED");
+  } else {
+    onState?.("EVIDENCE_SECURED");
+    onState?.("ANALYZING_EVIDENCE");
+  }
+  return { uploadedIds, failedArtifacts };
 }
 
 const apiGateway: EesGateway = {
@@ -298,8 +376,18 @@ const apiGateway: EesGateway = {
       request<ApiSupportForm[]>(`/support-forms?soldierId=${encodeURIComponent(user.id)}`),
       request<ApiRaterEvaluation[]>("/evaluations?role=rater"),
     ]);
-    const form = forms[0];
-    const goals = form ? await request<ApiGoal[]>(`/support-forms/${form.id}/goals`) : [];
+    const now = new Date();
+    const form = forms.find((candidate) => {
+      const start = new Date(candidate.ratingPeriodStart);
+      const end = candidate.ratingPeriodEnd ? new Date(candidate.ratingPeriodEnd) : null;
+      return start <= now && (!end || end >= now) && !["CONSUMED", "ARCHIVED", "QUARANTINED"].includes(candidate.status);
+    }) ?? forms[0];
+    const [goals, completeness] = form
+      ? await Promise.all([
+          request<ApiGoal[]>(`/support-forms/${form.id}/goals`),
+          request<ApiCompleteness>(`/support-forms/${form.id}/completeness`),
+        ])
+      : [[], null];
     const uniqueAssignments = new Map<string, ApiRaterEvaluation>();
     for (const evaluation of raterEvaluations) {
       if (evaluation.supportFormId && evaluation.ratingChain?.ratedSoldier) {
@@ -315,7 +403,7 @@ const apiGateway: EesGateway = {
           soldierId: soldier.id,
           displayName: `${soldier.firstName} ${soldier.lastName}`,
           rank: soldier.rank,
-          goals: assignmentGoals.map(({ id, title }) => ({ id, title })),
+          goals: assignmentGoals.map(({ id, title, sectionKey }) => ({ id, title, sectionKey })),
         };
       }),
     );
@@ -329,19 +417,34 @@ const apiGateway: EesGateway = {
         id: form.id,
         label: "Active support form",
         ratingPeriod: displayPeriod(form.ratingPeriodStart, form.ratingPeriodEnd),
+        ratingPeriodStart: form.ratingPeriodStart,
+        ratingPeriodEnd: form.ratingPeriodEnd,
+        status: form.status,
+        goalsEstablishedDimensions: completeness
+          ? Object.entries(completeness.goalCountsByDimension)
+              .filter(([, count]) => count > 0)
+              .map(([dimension]) => dimension as PerformanceEntry["section"])
+          : [],
       } : null,
-      goals: goals.map(({ id, title }) => ({ id, title })),
-      entries: form ? form.entries.map((entry) => mapEntry(entry, `${user.rank} ${displayName}`)) : [],
+      goals: goals.map(({ id, title, sectionKey }) => ({ id, title, sectionKey })),
+      entries: form ? form.entries.filter((entry) => !entry.withdrawnAt).map((entry) => mapEntry(entry, `${user.rank} ${displayName}`)) : [],
       raterAssignments,
     };
   },
-  async createEntry(draft) {
+  async createEntry(draft, onState) {
     const forms = await request<ApiSupportForm[]>("/support-forms");
-    const form = forms[0];
+    const now = new Date();
+    const form = forms.find((candidate) => {
+      const start = new Date(candidate.ratingPeriodStart);
+      const end = candidate.ratingPeriodEnd ? new Date(candidate.ratingPeriodEnd) : null;
+      return start <= now && (!end || end >= now) && !["CONSUMED", "ARCHIVED", "QUARANTINED"].includes(candidate.status);
+    }) ?? forms[0];
     if (!form) throw new Error("No active MERIT support form is available.");
+    onState?.("SAVING_ENTRY");
     const created = await request<ApiEntry>(`/support-forms/${form.id}/entries`, {
       method: "POST",
       body: JSON.stringify({
+      clientRequestId: draft.clientRequestId,
         section: draft.section,
         entryType: "ACCOMPLISHMENT",
         rawText: draft.rawText.trim(),
@@ -350,26 +453,38 @@ const apiGateway: EesGateway = {
       }),
     });
 
-    let uploadWarning: string | undefined;
-    if (draft.artifact) {
-      const upload = new FormData();
-      upload.set("file", draft.artifact);
-      upload.set("type", draft.artifactType ?? inferArtifactType(draft.artifact));
-      upload.set("flaggedByServiceMember", String(draft.flaggedByServiceMember));
-      if (draft.flagNote) upload.set("flagNote", draft.flagNote);
-      try {
-        await request<ApiArtifact>(`/support-forms/${form.id}/entries/${created.id}/artifacts`, {
-          method: "POST",
-          body: upload,
-        });
-      } catch {
-        uploadWarning = "The accomplishment was saved, but its evidence upload failed. Add the evidence from the full MERIT support-form workspace.";
-      }
-    }
+    const { failedArtifacts } = await uploadArtifacts(form.id, created.id, draft, onState);
+    const uploadWarning = failedArtifacts.length
+      ? `${failedArtifacts.length} evidence upload${failedArtifacts.length === 1 ? "" : "s"} failed. The entry is saved; retry without re-submitting it.`
+      : undefined;
 
     const refreshed = await request<ApiSupportForm>(`/support-forms/${form.id}`);
     const entry = refreshed.entries.find((item) => item.id === created.id) ?? created;
-    return { entry: mapEntry(entry, "You"), uploadWarning };
+    return { entry: mapEntry(entry, "You"), uploadWarning, failedArtifacts };
+  },
+  async retryEvidence(entry, draft, onState) {
+    const { failedArtifacts } = await uploadArtifacts(entry.supportFormId, entry.id, draft, onState);
+    const refreshed = await request<ApiSupportForm>(`/support-forms/${entry.supportFormId}`);
+    const current = refreshed.entries.find((item) => item.id === entry.id);
+    if (!current) throw new Error("The saved entry could not be reloaded.");
+    return { entry: mapEntry(current, "You"), failedArtifacts };
+  },
+  async resubmitClarification(entry, draft, response, onState) {
+    const { uploadedIds, failedArtifacts } = await uploadArtifacts(entry.supportFormId, entry.id, draft, onState);
+    if (failedArtifacts.length) return { entry, failedArtifacts };
+    onState?.("SAVING_ENTRY");
+    const updated = await request<ApiEntry>(`/support-forms/entries/${entry.id}/resubmit`, {
+      method: "POST",
+      body: JSON.stringify({ rawText: draft.rawText.trim(), response: response.trim(), replacementArtifactIds: uploadedIds }),
+    });
+    onState?.(draft.artifacts.length ? "ANALYZING_EVIDENCE" : "ANALYSIS_COMPLETE");
+    return { entry: mapEntry(updated, "You"), failedArtifacts: [] };
+  },
+  async withdrawEntry(entry, reason) {
+    await request(`/support-forms/entries/${entry.id}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason?.trim() || undefined }),
+    });
   },
   async createObservation(draft) {
     await request(`/support-forms/${draft.supportFormId}/observations`, {

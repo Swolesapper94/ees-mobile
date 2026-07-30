@@ -75,6 +75,8 @@ h1, h2, p { margin-top: 0; }
 .soldierChoices b { color: var(--blue); }
 .card { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px #00000014, 0 1px 2px #0000000a; }
 .readiness { margin-top: 17px; padding: 17px; }
+.readinessFact { margin: 10px 0 0; color: var(--muted); font-size: 11px; }
+.readinessFact strong { color: var(--ink); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .score { color: var(--blue); font-size: 13px; }
@@ -104,6 +106,8 @@ h1, h2, p { margin-top: 0; }
 .pill.confirmed { background: var(--green-soft); color: var(--green); }
 .pill.clarification { background: #fce5e3; color: #963d34; }
 .pill.muted { background: #edf0f3; color: #667386; }
+.pill.complete { background: var(--green-soft); color: var(--green); }
+.pill.failed { max-width: 108px; border-radius: 6px; background: #fce5e3; color: var(--maroon); white-space: normal; }
 .chevron { padding-left: 6px; color: #91a0b0; font-size: 22px; }
 .empty { color: var(--muted); font-size: 12px; }
 .subhead { position: relative; min-height: 86px; display: flex; align-items: center; gap: 10px; padding: 18px 18px 12px 15px; background: var(--navy); color: #fff; }
@@ -129,6 +133,7 @@ select, input[type="date"] { height: 45px; padding: 0 11px; font-size: 12px; }
 .primary:disabled { opacity: .6; }
 .notice { display: flex; gap: 10px; padding: 12px; border-radius: 6px; background: var(--blue-soft); color: #334e68; font-size: 11px; line-height: 1.45; }
 .notice b { display: grid; width: 17px; height: 17px; flex: none; place-items: center; border-radius: 50%; background: #557993; color: #fff; }
+.policyWarning { display: grid; gap: 4px; margin-top: 12px; padding: 11px; border: 1px solid #e6c66f; border-left: 4px solid var(--gold); border-radius: 6px; background: #fff9e8; color: #61490d; font-size: 10px; line-height: 1.45; }
 .upload { display: flex; min-height: 168px; flex-direction: column; align-items: center; justify-content: center; margin-top: 18px; border: 1.5px dashed #9aa59a; border-radius: 8px; background: #fbfcf8; color: #4d6177; text-align: center; }
 .upload input, .hiddenInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .upload > span { display: grid; width: 36px; height: 36px; margin-bottom: 9px; place-items: center; border-radius: 6px; background: var(--blue-soft); color: var(--blue); font-size: 25px; }
@@ -141,6 +146,7 @@ select, input[type="date"] { height: 45px; padding: 0 11px; font-size: 12px; }
 .proof strong, .proof small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proof strong { font-size: 11px; }
 .proof small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.proof select { height: 30px; margin-top: 7px; padding: 0 7px; font-size: 10px; }
 .proof button { width: 24px; height: 24px; border: 0; border-radius: 50%; color: #718094; }
 .fileIcon { display: grid; width: 39px; height: 43px; flex: none; place-items: center; border-radius: 6px; background: #f9e8e6; color: #a03936; font-size: 9px; font-weight: 900; }
 .check { display: flex; align-items: flex-start; gap: 9px; margin: 20px 2px 0; color: #4f5f72; font-size: 11px; line-height: 1.4; }
@@ -152,6 +158,8 @@ select, input[type="date"] { height: 45px; padding: 0 11px; font-size: 12px; }
 .success h1 { margin: 7px 0 13px; font-size: 25px; }
 .success > p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .success .submissionWarning { padding: 10px; border: 1px solid #f3d28c; border-radius: 6px; background: var(--gold-soft); color: #72520f; font-size: 11px; text-align: left; }
+.submissionProgress { display: grid; gap: 3px; margin: 12px 0; padding: 10px; border: 1px solid #bfd3c4; border-radius: 6px; background: #f1f7f2; color: #2f5738; font-size: 10px; text-align: left; }
+.submissionProgress.upload_failed, .submissionProgress.analysis_failed { border-color: #e7b9b4; background: #fff3f2; color: var(--maroon); }
 .audit { display: flex; gap: 10px; margin: 25px 0 16px; padding: 13px; text-align: left; }
 .audit > span { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 8px; background: var(--blue-soft); color: var(--blue); }
 .audit strong, .audit small { display: block; }
@@ -182,9 +190,19 @@ dd { margin: 5px 0 0; color: #314256; font-size: 11px; font-weight: 800; }
 .caption.pending { background: var(--gold-soft); color: var(--gold); }
 .caption.complete { background: var(--green-soft); color: var(--green); }
 .artifactCard p.warning { padding: 9px; border-radius: 8px; background: var(--gold-soft); color: #745413; }
+.clarificationRequest { margin: 14px 0; padding: 12px; border: 1px solid #e6c66f; border-left: 4px solid var(--gold); border-radius: 6px; background: #fff9e8; color: #61490d; }
+.clarificationRequest strong { font-size: 11px; }
+.clarificationRequest p { margin: 5px 0 0; font-size: 11px; line-height: 1.45; }
+.clarificationRequest button { margin-top: 10px; padding: 7px 9px; border: 1px solid #c99d30; border-radius: 5px; background: #fff; color: #61490d; font-size: 10px; font-weight: 900; }
+.compactUpload { min-height: 112px; }
 .reviewBoundary { margin-top: 21px; padding: 13px; border-radius: 6px; background: var(--gold-soft); color: #72520f; }
 .reviewBoundary b { font-size: 11px; }
 .reviewBoundary p { margin: 4px 0 0; font-size: 10px; line-height: 1.4; }
+.withdrawEntry { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.withdrawEntry > button, .withdrawEntry div button { padding: 7px 9px; border: 1px solid #d6aaa6; border-radius: 5px; background: #fff; color: var(--maroon); font-size: 10px; font-weight: 900; }
+.withdrawEntry label { display: block; margin-bottom: 6px; color: #344356; font-size: 11px; font-weight: 900; }
+.withdrawEntry div { display: flex; gap: 7px; margin-top: 7px; }
+.withdrawEntry p { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .bottomNav { position: absolute; z-index: 5; right: 0; bottom: 0; left: 0; display: flex; height: calc(58px + env(safe-area-inset-bottom)); padding: 6px 26px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #fff; }
 .bottomNav button { flex: 1; border: 0; background: none; color: #708095; font-size: 9px; font-weight: 800; }
 .bottomNav button > span { display: block; height: 20px; margin-bottom: 1px; font-size: 19px; line-height: 18px; }
