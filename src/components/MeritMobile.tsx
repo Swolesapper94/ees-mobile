@@ -9,6 +9,8 @@ import {
   MobileBootstrap,
   ObservationFeedbackType,
   PerformanceEntry,
+  PilotKpiSummary,
+  PilotMetricEventType,
   RaterAssignment,
   SubmissionState,
   leadershipDimensions,
@@ -16,8 +18,9 @@ import {
 import { eesGateway } from "../lib/ees-gateway";
 import { isMobileDemoMode, signInToMerit, useDevelopmentIdentity } from "../lib/auth";
 
-type Screen = "home" | "capture" | "evidence" | "success" | "record" | "detail" | "clarify";
+type Screen = "home" | "capture" | "evidence" | "success" | "record" | "detail" | "clarify" | "impact";
 type CaptureLane = "SOLDIER_ENTRY" | "RATER_OBSERVATION";
+type ActivePilotWorkflow = { workflowId: string; workflowType: CaptureLane; startedAt: number };
 
 const labels: Record<LeadershipDimension, string> = {
   CHARACTER: "Character",
@@ -198,7 +201,12 @@ export function MeritMobile() {
   const [clarificationResponse, setClarificationResponse] = useState("");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
+  const [pilotSummary, setPilotSummary] = useState<PilotKpiSummary | null>(null);
+  const [pilotDays, setPilotDays] = useState(30);
+  const [pilotLoading, setPilotLoading] = useState(false);
+  const [pilotError, setPilotError] = useState("");
   const submissionLock = useRef(false);
+  const activePilotWorkflow = useRef<ActivePilotWorkflow | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await eesGateway.bootstrap();
@@ -233,11 +241,46 @@ export function MeritMobile() {
     [data],
   );
 
+  function recordPilotEvent(eventType: PilotMetricEventType, details: { hasEvidence?: boolean; evidenceCount?: number } = {}) {
+    const workflow = activePilotWorkflow.current;
+    if (!workflow) return;
+    const includeDuration = eventType === "WORKFLOW_COMPLETED" || eventType === "WORKFLOW_FAILED";
+    void eesGateway.trackPilotEvent({
+      clientEventId: crypto.randomUUID(),
+      pilotId: "MERIT_MOBILE_PILOT",
+      workflowId: workflow.workflowId,
+      workflowType: workflow.workflowType,
+      eventType,
+      ...(includeDuration ? { durationMs: Math.max(0, Date.now() - workflow.startedAt) } : {}),
+      ...details,
+      occurredAt: new Date().toISOString(),
+    }).catch(() => undefined);
+  }
+
+  async function openPilotImpact(days = pilotDays) {
+    setPilotDays(days);
+    setPilotLoading(true);
+    setPilotError("");
+    setScreen("impact");
+    try {
+      setPilotSummary(await eesGateway.pilotSummary(days));
+    } catch (cause) {
+      setPilotError(cause instanceof Error ? cause.message : "Pilot impact could not be loaded.");
+    } finally {
+      setPilotLoading(false);
+    }
+  }
+
   async function startCapture() {
     if (!data?.supportForm) return;
     setCaptureLane("SOLDIER_ENTRY");
     setRaterTarget(null);
-    setDraft(await loadDraftLocally(data.supportForm.id) ?? emptyDraft());
+    const recoveredDraft = await loadDraftLocally(data.supportForm.id);
+    const nextDraft = recoveredDraft ?? emptyDraft();
+    setDraft(nextDraft);
+    activePilotWorkflow.current = { workflowId: nextDraft.clientRequestId, workflowType: "SOLDIER_ENTRY", startedAt: Date.now() };
+    recordPilotEvent("WORKFLOW_STARTED");
+    if (recoveredDraft) recordPilotEvent("DRAFT_RECOVERED");
     setError("");
     setScreen("capture");
   }
@@ -246,7 +289,10 @@ export function MeritMobile() {
     setCaptureLane("RATER_OBSERVATION");
     setRaterTarget(target);
     setFeedbackType("NEUTRAL");
-    setDraft(emptyDraft());
+    const nextDraft = emptyDraft();
+    setDraft(nextDraft);
+    activePilotWorkflow.current = { workflowId: nextDraft.clientRequestId, workflowType: "RATER_OBSERVATION", startedAt: Date.now() };
+    recordPilotEvent("WORKFLOW_STARTED");
     setError("");
     setScreen("capture");
   }
@@ -287,6 +333,7 @@ export function MeritMobile() {
     const dateError = validateEventDate();
     if (dateError) return setError(dateError);
     setError("");
+    recordPilotEvent("EVIDENCE_STEP_REACHED", { hasEvidence: draft.artifacts.length > 0, evidenceCount: draft.artifacts.length });
     setScreen("evidence");
   }
 
@@ -313,8 +360,11 @@ export function MeritMobile() {
     setBusy(true);
     setError("");
     setSubmissionWarning("");
+    let recordCreated = false;
     try {
       const result = await eesGateway.createEntry(draft, setSubmissionState);
+      recordCreated = true;
+      recordPilotEvent("WORKFLOW_COMPLETED", { hasEvidence: draft.artifacts.length > 0, evidenceCount: draft.artifacts.length });
       await refresh();
       setSelected(result.entry);
       setSubmissionWarning(result.uploadWarning ?? "");
@@ -322,6 +372,7 @@ export function MeritMobile() {
       if (data?.supportForm) await clearDraftLocally(data.supportForm.id);
       setScreen("success");
     } catch (cause: unknown) {
+      if (!recordCreated) recordPilotEvent("WORKFLOW_FAILED", { hasEvidence: draft.artifacts.length > 0, evidenceCount: draft.artifacts.length });
       setError(cause instanceof Error ? cause.message : "Submission failed.");
     } finally {
       submissionLock.current = false;
@@ -395,8 +446,10 @@ export function MeritMobile() {
     }
     setBusy(true);
     setError("");
+    let recordCreated = false;
     try {
       await eesGateway.createObservation({
+        clientRequestId: draft.clientRequestId,
         supportFormId: raterTarget.supportFormId,
         factualNote: draft.rawText,
         sectionKey: draft.section,
@@ -404,9 +457,12 @@ export function MeritMobile() {
         occurredAt: draft.eventDate,
         goalId: draft.goalId || undefined,
       });
+      recordCreated = true;
+      recordPilotEvent("WORKFLOW_COMPLETED", { hasEvidence: false, evidenceCount: 0 });
       setSelected(null);
       setScreen("success");
     } catch (cause: unknown) {
+      if (!recordCreated) recordPilotEvent("WORKFLOW_FAILED", { hasEvidence: false, evidenceCount: 0 });
       setError(cause instanceof Error ? cause.message : "Observation submission failed.");
     } finally {
       setBusy(false);
@@ -476,7 +532,7 @@ export function MeritMobile() {
             <p>{error}</p>
             {!isMobileDemoMode && (
               <div className="authForm">
-                <p className="authHint">Use a MERIT account. Local development also accepts Davis or Johnson with password <code>testpass</code>.</p>
+                <p className="authHint">Use a MERIT account. Local development also accepts Davis, Johnson, or Smith with password <code>testpass</code>.</p>
                 <label>Email<input type="email" autoComplete="username" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} /></label>
                 <label>Password<input type="password" autoComplete="current-password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void signIn(); }} /></label>
                 <button disabled={busy} onClick={() => void signIn()}>{busy ? "Signing in…" : "Sign in"}</button>
@@ -485,6 +541,7 @@ export function MeritMobile() {
                     <span>Or choose a local development identity</span>
                     <button onClick={() => void useDevIdentity("james.davis@army.mil")}>SGT Davis · Soldier</button>
                     <button onClick={() => void useDevIdentity("marcus.johnson@army.mil")}>SSG Johnson · Rater</button>
+                    <button onClick={() => void useDevIdentity("peter.smith@army.mil")}>CPT Smith · Platform admin</button>
                   </div>
                 )}
               </div>
@@ -546,6 +603,14 @@ export function MeritMobile() {
                     ))}
                   </div>
                 </section>
+              )}
+
+              {data.canViewPilotImpact && (
+                <button className="impactCta" onClick={() => void openPilotImpact()}>
+                  <span className="impactCtaIcon">↗</span>
+                  <span><strong>Pilot impact</strong><small>Adoption, speed, quality, and evaluation use</small></span>
+                  <b>›</b>
+                </button>
               )}
 
               {data.supportForm && <article className="card readiness">
@@ -750,7 +815,25 @@ export function MeritMobile() {
                 ))}
               </div>
             </div>
-            <BottomNav screen={screen} onHome={() => setScreen("home")} onCapture={startCapture} onRecord={() => setScreen("record")} />
+            <BottomNav screen={screen} onHome={() => setScreen("home")} onCapture={data.supportForm ? startCapture : undefined} onRecord={data.supportForm ? () => setScreen("record") : undefined} onImpact={data.canViewPilotImpact ? () => void openPilotImpact() : undefined} />
+          </div>
+        )}
+
+        {screen === "impact" && (
+          <div className="screen">
+            <Subhead eyebrow="COMMAND PILOT" title="Pilot impact" onBack={() => setScreen("home")} />
+            <div className="content impactDashboard">
+              <div className="impactToolbar">
+              <div><p className="eyebrow dark">MEASUREMENT WINDOW</p><strong>Pilot-wide aggregate</strong></div>
+                <div className="rangeToggle" aria-label="Pilot measurement window">
+                  {[30, 90].map((days) => <button key={days} className={pilotDays === days ? "selected" : ""} onClick={() => void openPilotImpact(days)}>{days}d</button>)}
+                </div>
+              </div>
+              {pilotLoading && <div className="impactLoading">Loading pilot measures…</div>}
+              {pilotError && <div className="impactError"><strong>Impact data unavailable</strong><p>{pilotError}</p><button onClick={() => void openPilotImpact()}>Try again</button></div>}
+              {!pilotLoading && pilotSummary && <PilotImpactDashboard summary={pilotSummary} />}
+            </div>
+            <BottomNav screen={screen} onHome={() => setScreen("home")} onCapture={data.supportForm ? startCapture : undefined} onRecord={data.supportForm ? () => setScreen("record") : undefined} onImpact={() => void openPilotImpact()} />
           </div>
         )}
 
@@ -814,8 +897,8 @@ export function MeritMobile() {
           </div>
         )}
 
-        {screen !== "record" && screen !== "capture" && screen !== "evidence" && screen !== "success" && screen !== "detail" && screen !== "clarify" && (
-          <BottomNav screen={screen} onHome={() => setScreen("home")} onCapture={startCapture} onRecord={() => setScreen("record")} />
+        {screen !== "record" && screen !== "impact" && screen !== "capture" && screen !== "evidence" && screen !== "success" && screen !== "detail" && screen !== "clarify" && (
+          <BottomNav screen={screen} onHome={() => setScreen("home")} onCapture={data.supportForm ? startCapture : undefined} onRecord={data.supportForm ? () => setScreen("record") : undefined} onImpact={data.canViewPilotImpact ? () => void openPilotImpact() : undefined} />
         )}
       </section>
 
@@ -898,12 +981,82 @@ function Subhead({ eyebrow, title, count, onBack, close }: { eyebrow?: string; t
   );
 }
 
-function BottomNav({ screen, onHome, onCapture, onRecord }: { screen: Screen; onHome: () => void; onCapture: () => void; onRecord: () => void }) {
+function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
+  const maxWeekly = Math.max(1, ...summary.weeklyTrend.map((week) => week.records));
+  const valueSteps = [
+    { label: "Mobile records", value: summary.outcomes.mobileRecords, width: 100 },
+    { label: "Reviewed or released", value: summary.outcomes.reviewedRecords, width: summary.outcomes.mobileRecords ? Math.round((summary.outcomes.reviewedRecords / summary.outcomes.mobileRecords) * 100) : 0 },
+    { label: "Used in evaluation", value: summary.outcomes.usedInEvaluation, width: summary.outcomes.mobileRecords ? Math.round((summary.outcomes.usedInEvaluation / summary.outcomes.mobileRecords) * 100) : 0 },
+  ];
+  return (
+    <>
+      <div className={`dataBanner ${summary.dataStatus === "SYNTHETIC_DEMO" ? "demo" : "live"}`}>
+        <strong>{summary.dataStatus === "SYNTHETIC_DEMO" ? "Illustrative pilot data" : "Live pilot-wide aggregate"}</strong>
+        <span>{summary.dataStatus === "SYNTHETIC_DEMO" ? "Seeded to demonstrate the platform view; not an Army result." : `${summary.scope.unitCount} unit${summary.scope.unitCount === 1 ? "" : "s"} in scope.`}</span>
+      </div>
+
+      <section className="impactKpis" aria-label="Pilot headline measures">
+        <article><span>Active people</span><strong>{summary.adoption.activeParticipants}</strong><small>{summary.adoption.repeatParticipants} repeat users</small></article>
+        <article><span>Mobile records</span><strong>{summary.outcomes.mobileRecords}</strong><small>{summary.outcomes.soldierEntries} Soldier · {summary.outcomes.raterObservations} leader</small></article>
+        <article><span>Median capture</span><strong>{summary.speed.medianCaptureSeconds === null ? "—" : formatDuration(summary.speed.medianCaptureSeconds)}</strong><small>n={summary.speed.measuredCompletions} completed</small></article>
+        <article><span>Completion</span><strong>{summary.adoption.completionRate}%</strong><small>{summary.adoption.workflowsFailed} failed workflows</small></article>
+      </section>
+
+      <section className="impactSection">
+        <div className="impactTitle"><div><p className="eyebrow dark">OPERATIONAL VALUE</p><h2>Record-to-evaluation chain</h2></div><span>{summary.period.days} days</span></div>
+        <div className="valueChain">
+          {valueSteps.map((step) => <div className="valueStep" key={step.label}><div><span>{step.label}</span><strong>{step.value}</strong></div><div className="valueBar"><span style={{ width: `${Math.min(100, step.width)}%` }} /></div></div>)}
+        </div>
+        <p className="sectionNote">Use in an evaluation is the strongest product outcome shown here. It does not imply a particular rating.</p>
+      </section>
+
+      <section className="impactSection">
+        <div className="impactTitle"><div><p className="eyebrow dark">STREAMLINING</p><h2>Weekly records captured</h2></div><span>{summary.outcomes.releasedObservations} released in counseling</span></div>
+        <div className="weeklyChart" aria-label="Weekly mobile records">
+          {summary.weeklyTrend.map((week) => <div className="weekColumn" key={week.weekStart}><strong>{week.records}</strong><div><span style={{ height: `${Math.max(6, Math.round((week.records / maxWeekly) * 100))}%` }} /></div><small>{formatWeek(week.weekStart)}</small></div>)}
+        </div>
+      </section>
+
+      <section className="impactSection">
+        <div className="impactTitle"><div><p className="eyebrow dark">RECORD QUALITY</p><h2>Useful context, not activity theater</h2></div></div>
+        <div className="qualityGrid">
+          <article><strong>{summary.quality.evidenceBackedPercent}%</strong><span>Evidence-backed entries</span><small>{summary.quality.evidenceBackedEntries} entries</small></article>
+          <article><strong>{summary.quality.goalLinkedPercent}%</strong><span>Goal-linked records</span><small>{summary.quality.goalLinkedRecords} records</small></article>
+          <article><strong>{summary.quality.medianReviewLagHours === null ? "—" : `${Math.round(summary.quality.medianReviewLagHours)}h`}</strong><span>Median review lag</span><small>n={summary.quality.measuredReviews} reviewed</small></article>
+          <article><strong>{summary.quality.needsClarification}</strong><span>Clarifications</span><small>{summary.quality.awaitingReview} awaiting review</small></article>
+        </div>
+        <div className="dimensionBars">
+          {summary.dimensionCoverage.map((item) => <div key={item.dimension}><span>{labels[item.dimension]}</span><div><i style={{ width: `${item.percent}%` }} /></div><strong>{item.records}</strong></div>)}
+        </div>
+      </section>
+
+      <section className="baselineCard">
+        <span>△</span><div><strong>Do not claim saved hours yet</strong><p>{summary.speed.timeSavings.message}</p><small>Next pilot instrument: time the current monthly support-form and evaluation-prep process before MERIT.</small></div>
+      </section>
+
+      <p className="privacyNote">{summary.privacy.message} Sample: {summary.sampleSize.mobileRecords} records and {summary.sampleSize.telemetryEvents} workflow events.</p>
+    </>
+  );
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function formatWeek(date: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+}
+
+function BottomNav({ screen, onHome, onCapture, onRecord, onImpact }: { screen: Screen; onHome: () => void; onCapture?: () => void; onRecord?: () => void; onImpact?: () => void }) {
   return (
     <nav className="bottomNav">
       <button className={screen === "home" ? "active" : ""} onClick={onHome}><span>⌂</span>Home</button>
-      <button className="captureNav" onClick={onCapture}><span>＋</span>Capture</button>
-      <button className={screen === "record" ? "active" : ""} onClick={onRecord}><span>☷</span>Record</button>
+      {onCapture && <button className="captureNav" onClick={onCapture}><span>＋</span>Capture</button>}
+      {onRecord && <button className={screen === "record" ? "active" : ""} onClick={onRecord}><span>☷</span>Record</button>}
+      {onImpact && <button className={screen === "impact" ? "active" : ""} onClick={onImpact}><span>↗</span>Impact</button>}
     </nav>
   );
 }

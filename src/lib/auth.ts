@@ -2,6 +2,7 @@ const AUTH_STORE_KEY = "merit-mobile-auth";
 const DEVELOPMENT_IDENTITIES = new Set([
   "james.davis@army.mil",
   "marcus.johnson@army.mil",
+  "peter.smith@army.mil",
 ]);
 
 interface SupabaseUser {

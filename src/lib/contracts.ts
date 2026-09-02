@@ -94,6 +94,7 @@ export interface RaterAssignment {
 }
 
 export interface ObservationDraft {
+  clientRequestId: string;
   supportFormId: string;
   factualNote: string;
   sectionKey: LeadershipDimension;
@@ -107,7 +108,10 @@ export interface MobileBootstrap {
     id: string;
     displayName: string;
     rank: string;
+    roles: string[];
+    applicationSupportRole: "NONE" | "SUPPORT" | "ADMINISTRATOR";
   };
+  canViewPilotImpact: boolean;
   supportForm: {
     id: string;
     label: string;
@@ -120,4 +124,75 @@ export interface MobileBootstrap {
   goals: Array<{ id: string; title: string; sectionKey: LeadershipDimension }>;
   entries: PerformanceEntry[];
   raterAssignments: RaterAssignment[];
+}
+
+export type PilotWorkflowType = "SOLDIER_ENTRY" | "RATER_OBSERVATION";
+
+export type PilotMetricEventType =
+  | "WORKFLOW_STARTED"
+  | "EVIDENCE_STEP_REACHED"
+  | "WORKFLOW_COMPLETED"
+  | "WORKFLOW_FAILED"
+  | "DRAFT_RECOVERED";
+
+export interface PilotMetricEventInput {
+  clientEventId: string;
+  pilotId: "MERIT_MOBILE_PILOT";
+  workflowId: string;
+  workflowType: PilotWorkflowType;
+  eventType: PilotMetricEventType;
+  durationMs?: number;
+  hasEvidence?: boolean;
+  evidenceCount?: number;
+  occurredAt: string;
+}
+
+export interface PilotKpiSummary {
+  dataStatus: "LIVE_AGGREGATE" | "SYNTHETIC_DEMO";
+  pilotId: string;
+  period: { days: number; since: string; through: string };
+  scope: { unitCount: number };
+  adoption: {
+    activeParticipants: number;
+    repeatParticipants: number;
+    workflowsStarted: number;
+    workflowsCompleted: number;
+    workflowsFailed: number;
+    completionRate: number;
+    draftRecoveries: number;
+  };
+  speed: {
+    medianCaptureSeconds: number | null;
+    measuredCompletions: number;
+    timeSavings: {
+      status: "BASELINE_REQUIRED" | "MEASURED";
+      savedHours: number | null;
+      message: string;
+    };
+  };
+  outcomes: {
+    mobileRecords: number;
+    soldierEntries: number;
+    raterObservations: number;
+    reviewedRecords: number;
+    usedInEvaluation: number;
+    releasedObservations: number;
+    positiveObservations: number;
+  };
+  quality: {
+    evidenceBackedEntries: number;
+    evidenceBackedPercent: number;
+    goalLinkedRecords: number;
+    goalLinkedPercent: number;
+    confirmed: number;
+    needsClarification: number;
+    notUsed: number;
+    awaitingReview: number;
+    medianReviewLagHours: number | null;
+    measuredReviews: number;
+  };
+  dimensionCoverage: Array<{ dimension: LeadershipDimension; records: number; percent: number }>;
+  weeklyTrend: Array<{ weekStart: string; entries: number; observations: number; records: number }>;
+  sampleSize: { telemetryEvents: number; mobileRecords: number };
+  privacy: { aggregationOnly: boolean; message: string };
 }

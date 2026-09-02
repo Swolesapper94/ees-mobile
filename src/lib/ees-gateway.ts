@@ -6,12 +6,15 @@ import {
   MobileBootstrap,
   ObservationDraft,
   PerformanceEntry,
+  PilotKpiSummary,
+  PilotMetricEventInput,
   RaterAssignment,
   SubmissionState,
 } from "./contracts";
 import { getMeritAccessToken } from "./auth";
 
 const STORE_KEY = "ees-mobile-demo-v1";
+const PILOT_EVENT_STORE_KEY = "ees-mobile-pilot-events-v1";
 const API_URL = import.meta.env.VITE_EES_API_URL || "http://localhost:4000";
 
 interface ApiUser {
@@ -19,6 +22,8 @@ interface ApiUser {
   firstName: string;
   lastName: string;
   rank: string;
+  roles: string[];
+  applicationSupportRole: "NONE" | "SUPPORT" | "ADMINISTRATOR";
 }
 
 interface ApiArtifact {
@@ -73,10 +78,15 @@ interface ApiRaterEvaluation {
   } | null;
 }
 
+const DEMO_TODAY = new Date().toISOString().slice(0, 10);
+const DEMO_YEAR = new Date().getUTCFullYear();
+const DEMO_PERIOD_START = `${DEMO_YEAR}-01-01`;
+const DEMO_PERIOD_END = `${DEMO_YEAR}-12-31`;
+
 const seedEntry: PerformanceEntry = {
   id: "entry-seed-1",
   supportFormId: "test-sf-davis-2026",
-  entryDate: "2026-07-12",
+  entryDate: DEMO_TODAY,
   section: "ACHIEVES",
   entryType: "ACCOMPLISHMENT",
   rawText:
@@ -95,7 +105,7 @@ const seedEntry: PerformanceEntry = {
       flaggedByServiceMember: false,
     },
   ],
-  createdAt: "2026-07-12T15:30:00.000Z",
+  createdAt: `${DEMO_TODAY}T15:30:00.000Z`,
   submittedBy: "SGT James Davis",
 };
 
@@ -104,13 +114,16 @@ const baseBootstrap: MobileBootstrap = {
     id: "test-user-davis",
     displayName: "James Davis",
     rank: "SGT",
+    roles: ["SOLDIER"],
+    applicationSupportRole: "ADMINISTRATOR",
   },
+  canViewPilotImpact: true,
   supportForm: {
     id: "test-sf-davis-2026",
-    label: "FY26 Support Form",
-    ratingPeriod: "01 SEP 2025 – 31 AUG 2026",
-    ratingPeriodStart: "2025-09-01",
-    ratingPeriodEnd: "2026-08-31",
+    label: `CY${String(DEMO_YEAR).slice(-2)} Support Form`,
+    ratingPeriod: `01 JAN ${DEMO_YEAR} – 31 DEC ${DEMO_YEAR}`,
+    ratingPeriodStart: DEMO_PERIOD_START,
+    ratingPeriodEnd: DEMO_PERIOD_END,
     status: "ACTIVE",
     goalsEstablishedDimensions: ["LEADS", "DEVELOPS"],
   },
@@ -140,6 +153,7 @@ function readDemoBootstrap(): MobileBootstrap {
       ...baseBootstrap,
       ...stored,
       user: { ...baseBootstrap.user, ...stored.user },
+      canViewPilotImpact: stored.canViewPilotImpact ?? baseBootstrap.canViewPilotImpact,
       supportForm: stored.supportForm === null ? null : { ...baseBootstrap.supportForm!, ...stored.supportForm },
       goals: stored.goals ?? baseBootstrap.goals,
       entries: stored.entries ?? baseBootstrap.entries,
@@ -217,6 +231,100 @@ export interface EesGateway {
   resubmitClarification(entry: PerformanceEntry, draft: CaptureDraft, response: string, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; failedArtifacts: DraftArtifact[] }>;
   withdrawEntry(entry: PerformanceEntry, reason?: string): Promise<void>;
   createObservation(draft: ObservationDraft): Promise<void>;
+  trackPilotEvent(event: PilotMetricEventInput): Promise<void>;
+  pilotSummary(days?: number): Promise<PilotKpiSummary>;
+}
+
+type StoredPilotEvent = PilotMetricEventInput & { actorId: string };
+
+function readDemoPilotEvents(): StoredPilotEvent[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(PILOT_EVENT_STORE_KEY) ?? "[]") as StoredPilotEvent[];
+  } catch {
+    return [];
+  }
+}
+
+function demoPilotSummary(days = 30): PilotKpiSummary {
+  const data = readDemoBootstrap();
+  const events = readDemoPilotEvents();
+  const localWorkflows = new Set(events.map((event) => event.workflowId)).size;
+  const localCompletions = events.filter((event) => event.eventType === "WORKFLOW_COMPLETED");
+  const newEntries = Math.max(0, data.entries.length - 1);
+  const through = new Date();
+  const since = new Date(through.getTime() - days * 24 * 60 * 60 * 1000);
+  const weeklyBase = days > 30 ? [8, 10, 12, 14, 16, 18, 21, 25] : [12, 16, 18, 21, 25];
+  const weeklyTrend = weeklyBase.map((records, index) => {
+    const week = new Date(through);
+    week.setUTCDate(week.getUTCDate() - (weeklyBase.length - 1 - index) * 7);
+    return {
+      weekStart: week.toISOString().slice(0, 10),
+      entries: Math.round(records * 0.72) + (index === weeklyBase.length - 1 ? newEntries : 0),
+      observations: Math.round(records * 0.28),
+      records: records + (index === weeklyBase.length - 1 ? newEntries : 0),
+    };
+  });
+  const mobileRecords = 112 + newEntries;
+  return {
+    dataStatus: "SYNTHETIC_DEMO",
+    pilotId: "MERIT_MOBILE_PILOT",
+    period: { days, since: since.toISOString(), through: through.toISOString() },
+    scope: { unitCount: 4 },
+    adoption: {
+      activeParticipants: 31,
+      repeatParticipants: 22,
+      workflowsStarted: 102 + localWorkflows,
+      workflowsCompleted: 94 + localCompletions.length,
+      workflowsFailed: 3,
+      completionRate: 92,
+      draftRecoveries: 5 + events.filter((event) => event.eventType === "DRAFT_RECOVERED").length,
+    },
+    speed: {
+      medianCaptureSeconds: 88,
+      measuredCompletions: 94 + localCompletions.length,
+      timeSavings: {
+        status: "BASELINE_REQUIRED",
+        savedHours: null,
+        message: "Capture duration is measured. Hours saved require a pre-pilot baseline using the same workflow definition.",
+      },
+    },
+    outcomes: {
+      mobileRecords,
+      soldierEntries: 83 + newEntries,
+      raterObservations: 29,
+      reviewedRecords: 78,
+      usedInEvaluation: 18,
+      releasedObservations: 16,
+      positiveObservations: 20,
+    },
+    quality: {
+      evidenceBackedEntries: 51,
+      evidenceBackedPercent: 61,
+      goalLinkedRecords: 72,
+      goalLinkedPercent: 64,
+      confirmed: 62,
+      needsClarification: 7,
+      notUsed: 3,
+      awaitingReview: 11 + newEntries,
+      medianReviewLagHours: 19,
+      measuredReviews: 72,
+    },
+    dimensionCoverage: [
+      { dimension: "CHARACTER", records: 13, percent: 12 },
+      { dimension: "PRESENCE", records: 17, percent: 15 },
+      { dimension: "INTELLECT", records: 16, percent: 14 },
+      { dimension: "LEADS", records: 24, percent: 21 },
+      { dimension: "DEVELOPS", records: 20, percent: 18 },
+      { dimension: "ACHIEVES", records: 22 + newEntries, percent: 20 },
+    ],
+    weeklyTrend,
+    sampleSize: { telemetryEvents: 412 + events.length, mobileRecords },
+    privacy: {
+      aggregationOnly: true,
+      message: "This view intentionally excludes names, individual rankings, accomplishment text, evidence, and rating content.",
+    },
+  };
 }
 
 const demoGateway: EesGateway = {
@@ -257,6 +365,16 @@ const demoGateway: EesGateway = {
   },
   async createObservation() {
     throw new Error("This demo identity is a rated Soldier. Sign in as an assigned rater to record leader observations.");
+  },
+  async trackPilotEvent(event) {
+    const events = readDemoPilotEvents();
+    if (events.some((stored) => stored.clientEventId === event.clientEventId)) return;
+    const data = readDemoBootstrap();
+    events.push({ ...event, actorId: data.user.id });
+    window.localStorage.setItem(PILOT_EVENT_STORE_KEY, JSON.stringify(events.slice(-500)));
+  },
+  async pilotSummary(days = 30) {
+    return demoPilotSummary(days);
   },
 };
 
@@ -407,12 +525,14 @@ const apiGateway: EesGateway = {
         };
       }),
     );
-    if (!form && raterAssignments.length === 0) {
+    const canViewPilotImpact = user.applicationSupportRole === "ADMINISTRATOR";
+    if (!form && raterAssignments.length === 0 && !canViewPilotImpact) {
       throw new Error("No active support form or assigned Soldier workload is available.");
     }
     const displayName = `${user.firstName} ${user.lastName}`;
     return {
-      user: { id: user.id, displayName, rank: user.rank },
+      user: { id: user.id, displayName, rank: user.rank, roles: user.roles, applicationSupportRole: user.applicationSupportRole },
+      canViewPilotImpact,
       supportForm: form ? {
         id: form.id,
         label: "Active support form",
@@ -444,7 +564,7 @@ const apiGateway: EesGateway = {
     const created = await request<ApiEntry>(`/support-forms/${form.id}/entries`, {
       method: "POST",
       body: JSON.stringify({
-      clientRequestId: draft.clientRequestId,
+        clientRequestId: draft.clientRequestId,
         section: draft.section,
         entryType: "ACCOMPLISHMENT",
         rawText: draft.rawText.trim(),
@@ -490,6 +610,7 @@ const apiGateway: EesGateway = {
     await request(`/support-forms/${draft.supportFormId}/observations`, {
       method: "POST",
       body: JSON.stringify({
+        clientRequestId: draft.clientRequestId,
         goalId: draft.goalId || null,
         sectionKey: draft.sectionKey,
         feedbackType: draft.feedbackType,
@@ -498,6 +619,12 @@ const apiGateway: EesGateway = {
         tags: [],
       }),
     });
+  },
+  async trackPilotEvent(event) {
+    await request("/pilot-metrics/events", { method: "POST", body: JSON.stringify(event) });
+  },
+  async pilotSummary(days = 30) {
+    return request<PilotKpiSummary>(`/pilot-metrics/summary?days=${days}&pilotId=MERIT_MOBILE_PILOT`);
   },
 };
 
