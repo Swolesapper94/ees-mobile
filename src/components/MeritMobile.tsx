@@ -611,15 +611,15 @@ export function MeritMobile() {
   const goalsEstablished = establishedDimensions.size;
   const currentDemoProfile = demoProfiles.find((profile) => profile.id === demoProfileId);
   const homeEyebrow = data.canViewPilotImpact
-    ? "PILOT OVERSIGHT"
+    ? "PRIVATE PILOT FEEDBACK LOOP"
     : data.raterAssignments.length > 0
-      ? "RATER WORKSPACE"
-      : "SUPPORT FORM · FY26";
+      ? "SOLDIER + LEADER WORKSPACE"
+      : "SOLDIER WORKSPACE · FY26";
   const homeDescription = data.canViewPilotImpact
-    ? "Review aggregate pilot adoption, workflow speed, record quality, and evaluation use."
-    : data.supportForm
-      ? "Capture performance now. Your rater reviews it in MERIT."
-      : "Record direct observations for the Soldiers you rate.";
+    ? "Review aggregate adoption, speed, reliability, and outcomes without opening personnel content."
+    : data.raterAssignments.length > 0
+      ? "Maintain your own record and document direct observations for Soldiers in your authorized roster."
+      : "Capture performance now. Your rating official reviews it in MERIT.";
 
   return (
     <main className="stage">
@@ -629,7 +629,7 @@ export function MeritMobile() {
             <>
               <span className="demoBadge">DEMO</span>
               <button className="demoProfileTrigger" onClick={() => setShowProfileSwitcher(true)} aria-haspopup="dialog">
-                {data.user.rank} {data.user.displayName.split(" ").at(-1)} <span aria-hidden="true">⌄</span>
+                {currentDemoProfile?.identityLabel ?? `${data.user.rank} ${data.user.displayName}`} <span aria-hidden="true">⌄</span>
               </button>
             </>
           ) : <span>9:41</span>}
@@ -643,14 +643,14 @@ export function MeritMobile() {
                 <div><p className="eyebrow dark">DEMO PROFILE</p><h2 id="profileSwitcherTitle">Switch MERIT view</h2></div>
                 <button onClick={() => setShowProfileSwitcher(false)} aria-label="Close profile selector">×</button>
               </header>
-              <p className="profileSwitcherHelp">Each profile has separate demo data and mirrors the intended live-pilot access boundaries.</p>
+              <p className="profileSwitcherHelp">A Leader is also a rated Soldier. Observer access comes from an authorized relationship; pilot metrics remain separate.</p>
               <div className="profileSwitcherList">
                 {demoProfiles.map((profile) => {
                   const active = profile.id === demoProfileId;
                   return (
                     <button key={profile.id} className={active ? "active" : ""} onClick={() => void enterDemoProfile(profile.id)} aria-current={active ? "true" : undefined}>
                       <span className="demoAvatar">{profile.initials}</span>
-                      <span><small>{profile.roleLabel}</small><strong>{profile.rank} {profile.displayName}</strong><em>{profile.accessLabel}</em></span>
+                      <span><small>{profile.roleLabel}</small><strong>{profile.identityLabel}</strong><em>{profile.accessLabel}</em></span>
                       <b aria-hidden="true">{active ? "✓" : "›"}</b>
                     </button>
                   );
@@ -679,22 +679,22 @@ export function MeritMobile() {
                   </button>
 
                   <div className="authorityStrip">
-                    <span>Rated Soldier lane</span>
-                    <strong>Rater review required</strong>
-                    <p>Your submission is self-reported evidence until an authorized rating official reviews it.</p>
+                    <span>Personal record</span>
+                    <strong>Rating-official review required</strong>
+                    <p>Every participant may capture their own work. The submission remains self-reported evidence until an authorized rating official reviews it.</p>
                   </div>
                 </>
               )}
 
               {data.raterAssignments.length > 0 && (
                 <section className="leaderCapture">
-                  <p className="eyebrow dark">ASSIGNED RATER LANE</p>
-                  <h2>Record a leader observation</h2>
-                  <p>Direct observations stay private to you until discussed and released through counseling.</p>
+                  <p className="eyebrow dark">AUTHORIZED OBSERVER LANE</p>
+                  <h2>Record a direct observation</h2>
+                  <p>This capability comes from an authorized Soldier relationship—not rank or pilot-admin access. Observations remain attributable and private until counseling release.</p>
                   <div className="soldierChoices">
                     {data.raterAssignments.map((assignment) => (
                       <button key={assignment.supportFormId} onClick={() => startObservation(assignment)}>
-                        <span><strong>{assignment.rank} {assignment.displayName}</strong><small>Record factual observation</small></span>
+                        <span><strong>{assignment.rank} {assignment.displayName}</strong><small>Authorized roster · record factual observation</small></span>
                         <b>→</b>
                       </button>
                     ))}
@@ -748,7 +748,7 @@ export function MeritMobile() {
         {screen === "capture" && (
           <div className="screen formScreen">
             <Subhead
-              eyebrow={captureLane === "SOLDIER_ENTRY" ? "RATED SOLDIER SUBMISSION" : `RATER OBSERVATION · ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? ""}`}
+              eyebrow={captureLane === "SOLDIER_ENTRY" ? "PERSONAL RECORD" : `AUTHORIZED OBSERVATION · ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? ""}`}
               title={captureLane === "SOLDIER_ENTRY" ? "Capture accomplishment" : "Record observation"}
               count={captureLane === "SOLDIER_ENTRY" ? "1 / 2" : undefined}
               onBack={() => setScreen("home")}
@@ -757,7 +757,7 @@ export function MeritMobile() {
               <p className="helper">
                 {captureLane === "SOLDIER_ENTRY"
                   ? "Keep it factual. This is your self-reported evidence; your rater must review it before use."
-                  : "Record only what you directly observed. This remains private until you discuss and release it through counseling."}
+                  : "Record only what you directly observed. MERIT retains who observed it and routes the record through the Soldier's authorized rating relationship."}
               </p>
               <label>{captureLane === "SOLDIER_ENTRY" ? "What happened?" : "What did you directly observe?"}</label>
               <textarea
@@ -882,13 +882,13 @@ export function MeritMobile() {
             <div className="success">
               <span className="successIcon">✓</span>
               <p className="eyebrow dark">{captureLane === "RATER_OBSERVATION" ? "PRIVATE OBSERVATION RECORDED" : "ENTRY SUBMITTED"}</p>
-              <h1>{captureLane === "RATER_OBSERVATION" ? "Leader context preserved." : "Captured while it was fresh."}</h1>
+              <h1>{captureLane === "RATER_OBSERVATION" ? "Direct context preserved." : "Captured while it was fresh."}</h1>
               <p>{captureLane === "RATER_OBSERVATION"
                 ? `Your observation about ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? "the Soldier"} remains private until discussed and released through counseling.`
                 : "Your accomplishment is self-reported evidence awaiting rater review. The rater can confirm it, request clarification, or mark it not used."}</p>
               {submissionWarning && <p className="submissionWarning">{submissionWarning}</p>}
               <SubmissionProgress state={submissionState} hasEvidence={Boolean(selected?.artifacts.length || failedArtifacts.length)} />
-              <div className="card audit"><span>⌁</span><div><strong>{captureLane === "RATER_OBSERVATION" ? "Rater-owned record created" : "Evidence trail created"}</strong><small>{captureLane === "RATER_OBSERVATION" ? "Private until counseling release" : `Submitted by ${selected?.submittedBy ?? "you"}`}</small></div></div>
+              <div className="card audit"><span>⌁</span><div><strong>{captureLane === "RATER_OBSERVATION" ? "Observer-attributed record created" : "Evidence trail created"}</strong><small>{captureLane === "RATER_OBSERVATION" ? "Private until counseling release" : `Submitted by ${selected?.submittedBy ?? "you"}`}</small></div></div>
               {failedArtifacts.length > 0 && <button className="secondaryWide" disabled={busy} onClick={() => void retryEvidence()}>{busy ? "Retrying evidence…" : `Retry ${failedArtifacts.length} failed upload${failedArtifacts.length === 1 ? "" : "s"}`}</button>}
               {selected && <button className="secondaryWide" onClick={() => openEntry(selected)}>View submitted entry</button>}
             </div>
@@ -918,7 +918,7 @@ export function MeritMobile() {
 
         {screen === "impact" && data.canViewPilotImpact && data.user.applicationSupportRole === "ADMINISTRATOR" && (
           <div className="screen">
-            <Subhead eyebrow="COMMAND PILOT" title="Pilot impact" onBack={() => setScreen("home")} />
+            <Subhead eyebrow="PILOT OWNER ONLY" title="Pilot impact" onBack={() => setScreen("home")} />
             <div className="content impactDashboard">
               <div className="impactToolbar">
               <div><p className="eyebrow dark">MEASUREMENT WINDOW</p><strong>Pilot-wide aggregate</strong></div>
@@ -1001,7 +1001,7 @@ export function MeritMobile() {
 
       <aside className="demoNotes">
         <p className="eyebrow dark">{currentDemoProfile?.roleLabel ?? "MERIT MOBILE"}</p>
-        <h2>{currentDemoProfile ? `${currentDemoProfile.rank} ${currentDemoProfile.displayName}` : "The capture layer"}</h2>
+        <h2>{currentDemoProfile?.identityLabel ?? "The capture layer"}</h2>
         <p>{currentDemoProfile?.description ?? "A focused field workflow that feeds the same support-form record used by the full MERIT platform."}</p>
         <ol>{demoViewSteps(demoProfileId).map((step) => <li key={step}>{step}</li>)}</ol>
         <p className="demoMode">Demo mode uses local browser storage. Production mode writes through the authorized MERIT support-form and evidence routes.</p>
@@ -1011,15 +1011,15 @@ export function MeritMobile() {
 }
 
 function demoViewSteps(profileId: DemoProfileId | null): string[] {
-  if (profileId === "rater") return [
-    "Choose an assigned Soldier.",
-    "Record a factual leader observation.",
-    "Keep it private until counseling release.",
+  if (profileId === "leader") return [
+    "Maintain your own record as a rated Soldier.",
+    "Observe Soldiers only within your authorized roster.",
+    "Keep observations attributable and private until counseling release.",
   ];
-  if (profileId === "administrator") return [
+  if (profileId === "pilot_owner") return [
     "Open the pilot-wide aggregate.",
-    "Review adoption, speed, and record quality.",
-    "Track records through evaluation use without ranking people.",
+    "Review adoption, speed, reliability, and workflow outcomes.",
+    "Measure the pilot without opening personnel narratives or ranking people.",
   ];
   return [
     "Capture the accomplishment when it happens.",
@@ -1039,7 +1039,7 @@ function DemoLogin({ onSelect }: { onSelect: (profileId: DemoProfileId) => void 
         <div className="demoLoginIntro">
           <p className="eyebrow dark">MERIT MOBILE</p>
           <h1 id="demoLoginTitle">Choose a profile</h1>
-          <p>Enter the demonstration as a Soldier, rater, or platform administrator. Each profile shows only its authorized MERIT view.</p>
+          <p>Compare the Soldier, Leader, and private Pilot Owner views. A person can be both rated and a leader; pilot analytics are a separate access boundary.</p>
         </div>
         <div className="demoProfileGrid">
           {demoProfiles.map((profile) => (
@@ -1047,15 +1047,15 @@ function DemoLogin({ onSelect }: { onSelect: (profileId: DemoProfileId) => void 
               <span className="demoAvatar">{profile.initials}</span>
               <span className="demoProfileCopy">
                 <small>{profile.roleLabel}</small>
-                <strong>{profile.rank} {profile.displayName}</strong>
+                <strong>{profile.identityLabel}</strong>
                 <span>{profile.description}</span>
-                <em className={profile.id === "administrator" ? "hasImpact" : ""}>{profile.accessLabel}</em>
+                <em className={profile.id === "pilot_owner" ? "hasImpact" : ""}>{profile.accessLabel}</em>
               </span>
               <b aria-hidden="true">›</b>
             </button>
           ))}
         </div>
-        <p className="demoDisclosure"><strong>Demo access:</strong> All names and measures shown here are synthetic. No Army account or password is used.</p>
+        <p className="demoDisclosure"><strong>Staged demonstration:</strong> Names, records, and measures are synthetic and stay in this browser. No Army account, live MERIT API, or production database is used.</p>
       </section>
     </main>
   );

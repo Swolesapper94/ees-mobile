@@ -4,21 +4,27 @@ Mobile-first performance and evidence capture for MERIT.
 
 This repository is a narrow MVP frontend: capture an accomplishment when it
 happens, attach supporting evidence, disclose a possible record discrepancy,
-and submit the entry for independent rater review. Assigned raters also receive
-a separate lane for recording direct factual observations about their Soldiers.
-It does not reproduce the full desktop evaluation workspace or transfer rating
-authority to the rated Soldier.
+and submit the entry for independent rating-official review. Participants with
+an authorized Soldier relationship also receive an observer lane for recording
+direct factual observations. A leader remains a rated Soldier with a personal
+record of their own; these capabilities are not mutually exclusive.
 
 ## Capture and authority model
 
-- **Rated Soldier:** submits self-reported accomplishments and evidence. Every
+- **Soldier:** submits self-reported accomplishments and evidence to their own
+   record. Every
    entry starts `UNREVIEWED`; an authorized rater or senior rater must confirm
    it, request clarification, or mark it not used in the full MERIT workspace.
-- **Assigned rater:** records direct factual observations for Soldiers they
-   rate. These are rater-owned and private until discussed and released through
-   counseling.
-- **Senior rater:** may review Soldier-submitted entries and read observations,
-   but does not author observations in place of the assigned rater.
+- **Leader / authorized observer:** has the Soldier capability above and may
+   record direct factual observations for Soldiers in an authorized roster. In
+   the current pilot backend, that roster is derived from formal rater
+   assignments. Observations retain observer attribution and remain private
+   until discussed and released through counseling.
+- **Rating official:** reviews Soldier-submitted entries for the Soldiers in
+   their rating relationship. This is a relationship, not a separate identity.
+- **Pilot Owner:** sees aggregate adoption, speed, reliability, and workflow
+   outcomes only. Pilot analytics do not grant operational access to personnel
+   records, and Army rank does not grant pilot-analytics access.
 
 Mobile captures source material. Review, counseling release, evaluation
 authoring, and signatures remain in the full MERIT platform.
@@ -39,9 +45,10 @@ the **Take photo** action opens the rear camera where the browser supports it.
 
 The default demo mode is self-contained:
 
-- a profile-based sign-in screen opens the Soldier, rater, or platform-administrator view;
+- a profile-based sign-in screen opens the Soldier, Leader, or Pilot Owner view;
 - the persistent demo profile control switches views without a rebuild or separate URL;
-- only the platform-administrator profile can open the aggregate pilot-impact dashboard;
+- the Leader has both a personal record and an authorized observer lane;
+- only the Pilot Owner can open the private aggregate pilot-impact dashboard;
 - unfinished drafts, including selected evidence blobs, persist in IndexedDB;
 - image/PDF selection is real;
 - upload and AI analysis use separate, explicit states;
@@ -49,7 +56,8 @@ The default demo mode is self-contained:
 - the performance-record timeline updates from the same client-side store.
 
 This demonstrates the intended product flow but does not send files or records
-to the MERIT platform while demo mode is enabled.
+to the MERIT platform while demo mode is enabled. Its staged records and
+interaction state remain in the current browser only.
 
 ## Connect it to MERIT
 
@@ -75,11 +83,14 @@ cd ../ees2-frontend
 ./node_modules/.bin/playwright test tests/e2e/14-mobile-rater-loop.spec.ts --project=chromium
 ```
 
-Production mode already maps the existing authenticated routes in
+Production mode maps the existing authenticated routes in
 `src/lib/ees-gateway.ts`: active support-form lookup, goal lookup,
 `ACCOMPLISHMENT` creation, multipart artifact upload, assigned-rater discovery,
 and rater observation creation. It does not create a parallel mobile-only
-backend contract.
+backend contract. Supabase Auth establishes the session; the mobile app sends
+that token to the MERIT API, and the API owns access to operational database
+records and private evidence. The browser never receives a service-role key or
+writes directly to the protected tables.
 
 During local development, the sign-in screen also offers Davis and Johnson
 development identities. Those shortcuts use the backend's development-only

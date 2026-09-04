@@ -110,13 +110,14 @@ const seedEntry: PerformanceEntry = {
   submittedBy: "SGT James Davis",
 };
 
-export type DemoProfileId = "soldier" | "rater" | "administrator";
+export type DemoProfileId = "soldier" | "leader" | "pilot_owner";
 
 export interface DemoProfileOption {
   id: DemoProfileId;
   initials: string;
   rank: string;
   displayName: string;
+  identityLabel: string;
   roleLabel: string;
   description: string;
   accessLabel: string;
@@ -128,27 +129,30 @@ export const demoProfiles: DemoProfileOption[] = [
     initials: "JD",
     rank: "SGT",
     displayName: "James Davis",
-    roleLabel: "Rated Soldier",
-    description: "Capture accomplishments, attach evidence, and review your performance record.",
-    accessLabel: "No pilot-impact access",
+    identityLabel: "SGT James Davis",
+    roleLabel: "Soldier",
+    description: "Maintain your own performance record as a rated Soldier.",
+    accessLabel: "Personal record · no pilot metrics",
   },
   {
-    id: "rater",
+    id: "leader",
     initials: "MJ",
     rank: "SSG",
     displayName: "Marcus Johnson",
-    roleLabel: "Rater",
-    description: "Record direct leader observations for an assigned Soldier.",
-    accessLabel: "No pilot-impact access",
+    identityLabel: "SSG Marcus Johnson",
+    roleLabel: "Leader",
+    description: "Maintain your own record and observe Soldiers in your authorized roster.",
+    accessLabel: "Personal record + observer lane · no pilot metrics",
   },
   {
-    id: "administrator",
-    initials: "PS",
-    rank: "CPT",
-    displayName: "Peter Smith",
-    roleLabel: "Platform Administrator",
-    description: "Review aggregate adoption, speed, record quality, and evaluation use.",
-    accessLabel: "Pilot-impact access",
+    id: "pilot_owner",
+    initials: "PO",
+    rank: "MERIT",
+    displayName: "Pilot Owner",
+    identityLabel: "MERIT Pilot Owner",
+    roleLabel: "Pilot Owner",
+    description: "Review the private pilot feedback loop without opening personnel content.",
+    accessLabel: "Aggregate pilot metrics only",
   },
 ];
 
@@ -156,6 +160,24 @@ const demoGoals: MobileBootstrap["goals"] = [
   { id: "goal-readiness", title: "Improve platoon training readiness and accountability", sectionKey: "LEADS" },
   { id: "goal-development", title: "Develop junior Soldiers through monthly coaching", sectionKey: "DEVELOPS" },
 ];
+
+const demoLeaderGoals: MobileBootstrap["goals"] = [
+  { id: "goal-johnson-readiness", title: "Improve squad maintenance readiness and reporting accuracy", sectionKey: "ACHIEVES" },
+  { id: "goal-johnson-development", title: "Develop team leaders through weekly coaching", sectionKey: "DEVELOPS" },
+];
+
+const seedLeaderEntry: PerformanceEntry = {
+  id: "entry-seed-johnson-1",
+  supportFormId: "test-sf-johnson-2026",
+  entryDate: DEMO_TODAY,
+  section: "DEVELOPS",
+  entryType: "ACCOMPLISHMENT",
+  rawText: "Coached two team leaders through counseling preparation and improved on-time completion across the squad.",
+  confirmationStatus: "UNREVIEWED",
+  artifacts: [],
+  createdAt: `${DEMO_TODAY}T14:10:00.000Z`,
+  submittedBy: "SSG Marcus Johnson",
+};
 
 const demoBootstrapByProfile: Record<DemoProfileId, MobileBootstrap> = {
   soldier: {
@@ -180,7 +202,7 @@ const demoBootstrapByProfile: Record<DemoProfileId, MobileBootstrap> = {
     entries: [seedEntry],
     raterAssignments: [],
   },
-  rater: {
+  leader: {
     user: {
       id: "test-user-johnson",
       displayName: "Marcus Johnson",
@@ -189,9 +211,17 @@ const demoBootstrapByProfile: Record<DemoProfileId, MobileBootstrap> = {
       applicationSupportRole: "NONE",
     },
     canViewPilotImpact: false,
-    supportForm: null,
-    goals: [],
-    entries: [],
+    supportForm: {
+      id: "test-sf-johnson-2026",
+      label: `CY${String(DEMO_YEAR).slice(-2)} Support Form`,
+      ratingPeriod: `01 JAN ${DEMO_YEAR} – 31 DEC ${DEMO_YEAR}`,
+      ratingPeriodStart: DEMO_PERIOD_START,
+      ratingPeriodEnd: DEMO_PERIOD_END,
+      status: "ACTIVE",
+      goalsEstablishedDimensions: ["ACHIEVES", "DEVELOPS"],
+    },
+    goals: demoLeaderGoals,
+    entries: [seedLeaderEntry],
     raterAssignments: [{
       supportFormId: "test-sf-davis-2026",
       soldierId: "test-user-davis",
@@ -200,12 +230,12 @@ const demoBootstrapByProfile: Record<DemoProfileId, MobileBootstrap> = {
       goals: demoGoals.map(({ id, title }) => ({ id, title })),
     }],
   },
-  administrator: {
+  pilot_owner: {
     user: {
-      id: "test-user-smith",
-      displayName: "Peter Smith",
-      rank: "CPT",
-      roles: ["ADMIN"],
+      id: "test-user-pilot-owner",
+      displayName: "Pilot Owner",
+      rank: "MERIT",
+      roles: [],
       applicationSupportRole: "ADMINISTRATOR",
     },
     canViewPilotImpact: true,
@@ -221,6 +251,19 @@ for (const [profileId, bootstrap] of Object.entries(demoBootstrapByProfile)) {
   if (bootstrap.canViewPilotImpact !== isAdministrator) {
     throw new Error(`Demo profile ${profileId} has inconsistent pilot-impact access.`);
   }
+}
+
+const soldierDemo = demoBootstrapByProfile.soldier;
+const leaderDemo = demoBootstrapByProfile.leader;
+const pilotOwnerDemo = demoBootstrapByProfile.pilot_owner;
+if (!soldierDemo.supportForm || soldierDemo.raterAssignments.length > 0) {
+  throw new Error("The Soldier demo must expose only the personal-record lane.");
+}
+if (!leaderDemo.supportForm || leaderDemo.raterAssignments.length === 0) {
+  throw new Error("The Leader demo must combine a personal record with an authorized observer lane.");
+}
+if (pilotOwnerDemo.supportForm || pilotOwnerDemo.raterAssignments.length > 0 || pilotOwnerDemo.user.roles.length > 0) {
+  throw new Error("The Pilot Owner demo must not inherit operational Soldier or rating authority.");
 }
 
 function cloneBootstrap(data: MobileBootstrap): MobileBootstrap {
@@ -353,12 +396,13 @@ function readDemoPilotEvents(): StoredPilotEvent[] {
 }
 
 function demoPilotSummary(days = 30): PilotKpiSummary {
-  const data = readDemoBootstrapForProfile("soldier");
+  const soldierData = readDemoBootstrapForProfile("soldier");
+  const leaderData = readDemoBootstrapForProfile("leader");
   const events = readDemoPilotEvents();
   const localWorkflows = new Set(events.map((event) => event.workflowId)).size;
   const localCompletions = events.filter((event) => event.eventType === "WORKFLOW_COMPLETED");
   const localRaterCompletions = localCompletions.filter((event) => event.workflowType === "RATER_OBSERVATION").length;
-  const newEntries = Math.max(0, data.entries.length - 1);
+  const newEntries = Math.max(0, soldierData.entries.length - 1) + Math.max(0, leaderData.entries.length - 1);
   const through = new Date();
   const since = new Date(through.getTime() - days * 24 * 60 * 60 * 1000);
   const weeklyBase = days > 30 ? [8, 10, 12, 14, 16, 18, 21, 25] : [12, 16, 18, 21, 25];
@@ -474,7 +518,7 @@ const demoGateway: EesGateway = {
     const data = readDemoBootstrap();
     const assigned = data.raterAssignments.some((assignment) => assignment.supportFormId === draft.supportFormId);
     if (!data.user.roles.includes("RATER") || !assigned) {
-      throw new Error("Only the assigned rater can record this leader observation.");
+      throw new Error("Only a leader with an authorized Soldier relationship can record this observation.");
     }
   },
   async trackPilotEvent(event) {

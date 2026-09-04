@@ -20,18 +20,21 @@ or evidence-caption service.
 8. Surface the same entry in the assigned rater's MERIT support-form view for
    independent confirmation, clarification, or non-use.
 
-The assigned-rater lane is separate:
+The authorized-observer lane is separate. A leader can also have a personal
+support form and therefore be both rated and an observer at the same time:
 
 1. Discover current rater assignments through `GET /api/evaluations?role=rater`.
 2. Select an evaluation's linked support form and rated Soldier.
 3. Submit a direct factual observation through
    `POST /api/support-forms/:formId/observations`.
-4. Keep the observation private to the assigned rater until it is discussed
+4. Keep the observation attributable and private until it is discussed
    and released through counseling in the full MERIT workspace.
 
-Senior raters may read observations and may review Soldier-submitted entries,
-but the backend intentionally rejects observation creation by anyone other
-than the currently assigned rater.
+For the initial pilot, the authorized observation roster is intentionally
+derived from current rater assignments. Senior raters may read observations
+and may review Soldier-submitted entries, but the backend rejects observation
+creation by anyone outside that assigned relationship. Broader command, peer,
+or upward observation policy remains deferred.
 
 ## Source-of-truth fields represented by the scaffold
 
@@ -91,6 +94,8 @@ upload as separate requests. Preserve failure states explicitly:
 ## Governance boundaries
 
 - The rated Soldier may submit factual entries and evidence.
+- A leader may simultaneously maintain their own rated-Soldier record and
+  observe Soldiers inside their authorized roster.
 - Evidence does not calculate, recommend, or determine a rating.
 - The assigned rater independently confirms, requests clarification, or marks
   an entry not used.
@@ -98,6 +103,8 @@ upload as separate requests. Preserve failure states explicitly:
   confirmation authority.
 - Actor, subject, timestamps, edits, and delegated actions must remain
   attributable in the EES audit log.
+- Pilot-owner access is separate from operational permissions and returns only
+  aggregate, content-free measures.
 - The browser must never receive a Supabase service-role credential.
 
 ## Demo mode
