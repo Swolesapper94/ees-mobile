@@ -131,8 +131,8 @@ export const demoProfiles: DemoProfileOption[] = [
     displayName: "James Davis",
     identityLabel: "SGT James Davis",
     roleLabel: "Soldier",
-    description: "Maintain your own performance record as a rated Soldier.",
-    accessLabel: "Personal record · no pilot metrics",
+    description: "Log your own performance.",
+    accessLabel: "Personal record",
   },
   {
     id: "leader",
@@ -141,8 +141,8 @@ export const demoProfiles: DemoProfileOption[] = [
     displayName: "Marcus Johnson",
     identityLabel: "SSG Marcus Johnson",
     roleLabel: "Leader",
-    description: "Maintain your own record and observe Soldiers in your authorized roster.",
-    accessLabel: "Personal record + observer lane · no pilot metrics",
+    description: "Log your work or observe your roster.",
+    accessLabel: "Personal record + observer access",
   },
   {
     id: "pilot_owner",
@@ -151,8 +151,8 @@ export const demoProfiles: DemoProfileOption[] = [
     displayName: "Pilot Owner",
     identityLabel: "MERIT Pilot Owner",
     roleLabel: "Pilot Owner",
-    description: "Review the private pilot feedback loop without opening personnel content.",
-    accessLabel: "Aggregate pilot metrics only",
+    description: "View aggregate pilot results.",
+    accessLabel: "Pilot metrics only",
   },
 ];
 

@@ -611,15 +611,15 @@ export function MeritMobile() {
   const goalsEstablished = establishedDimensions.size;
   const currentDemoProfile = demoProfiles.find((profile) => profile.id === demoProfileId);
   const homeEyebrow = data.canViewPilotImpact
-    ? "PRIVATE PILOT FEEDBACK LOOP"
+    ? "PILOT OWNER"
     : data.raterAssignments.length > 0
-      ? "SOLDIER + LEADER WORKSPACE"
-      : "SOLDIER WORKSPACE · FY26";
+      ? "LEADER"
+      : "SOLDIER";
   const homeDescription = data.canViewPilotImpact
-    ? "Review aggregate adoption, speed, reliability, and outcomes without opening personnel content."
+    ? "View aggregate results. Personnel records are not available."
     : data.raterAssignments.length > 0
-      ? "Maintain your own record and document direct observations for Soldiers in your authorized roster."
-      : "Capture performance now. Your rating official reviews it in MERIT.";
+      ? "Log your work or observe an assigned Soldier."
+      : "Log your work for rater review.";
 
   return (
     <main className="stage">
@@ -640,10 +640,10 @@ export function MeritMobile() {
           <div className="demoProfileOverlay" role="dialog" aria-modal="true" aria-labelledby="profileSwitcherTitle">
             <section className="demoProfileSheet">
               <header>
-                <div><p className="eyebrow dark">DEMO PROFILE</p><h2 id="profileSwitcherTitle">Switch MERIT view</h2></div>
+                <div><p className="eyebrow dark">DEMO PROFILE</p><h2 id="profileSwitcherTitle">Choose a profile</h2></div>
                 <button onClick={() => setShowProfileSwitcher(false)} aria-label="Close profile selector">×</button>
               </header>
-              <p className="profileSwitcherHelp">A Leader is also a rated Soldier. Observer access comes from an authorized relationship; pilot metrics remain separate.</p>
+              <p className="profileSwitcherHelp">Pilot metrics are Pilot Owner only.</p>
               <div className="profileSwitcherList">
                 {demoProfiles.map((profile) => {
                   const active = profile.id === demoProfileId;
@@ -674,27 +674,27 @@ export function MeritMobile() {
                 <>
                   <button className="captureCta" onClick={startCapture}>
                     <span className="plus">＋</span>
-                    <span><strong>Capture accomplishment</strong><small>Log it now. Keep the proof.</small></span>
+                    <span><strong>Capture accomplishment</strong><small>Add what happened.</small></span>
                     <b>→</b>
                   </button>
 
                   <div className="authorityStrip">
-                    <span>Personal record</span>
-                    <strong>Rating-official review required</strong>
-                    <p>Every participant may capture their own work. The submission remains self-reported evidence until an authorized rating official reviews it.</p>
+                    <span>Your entry</span>
+                    <strong>Rater review required</strong>
+                    <p>Self-reported until reviewed.</p>
                   </div>
                 </>
               )}
 
               {data.raterAssignments.length > 0 && (
                 <section className="leaderCapture">
-                  <p className="eyebrow dark">AUTHORIZED OBSERVER LANE</p>
-                  <h2>Record a direct observation</h2>
-                  <p>This capability comes from an authorized Soldier relationship—not rank or pilot-admin access. Observations remain attributable and private until counseling release.</p>
+                  <p className="eyebrow dark">OBSERVE A SOLDIER</p>
+                  <h2>Choose a Soldier</h2>
+                  <p>Record only what you saw. It stays private until released in counseling.</p>
                   <div className="soldierChoices">
                     {data.raterAssignments.map((assignment) => (
                       <button key={assignment.supportFormId} onClick={() => startObservation(assignment)}>
-                        <span><strong>{assignment.rank} {assignment.displayName}</strong><small>Authorized roster · record factual observation</small></span>
+                        <span><strong>{assignment.rank} {assignment.displayName}</strong><small>Record observation</small></span>
                         <b>→</b>
                       </button>
                     ))}
@@ -705,7 +705,7 @@ export function MeritMobile() {
               {data.canViewPilotImpact && (
                 <button className="impactCta" onClick={() => void openPilotImpact()}>
                   <span className="impactCtaIcon">↗</span>
-                  <span><strong>Pilot impact</strong><small>Adoption, speed, quality, and evaluation use</small></span>
+                  <span><strong>Pilot impact</strong><small>Adoption, time, reliability, outcomes</small></span>
                   <b>›</b>
                 </button>
               )}
@@ -756,8 +756,8 @@ export function MeritMobile() {
             <div className="content">
               <p className="helper">
                 {captureLane === "SOLDIER_ENTRY"
-                  ? "Keep it factual. This is your self-reported evidence; your rater must review it before use."
-                  : "Record only what you directly observed. MERIT retains who observed it and routes the record through the Soldier's authorized rating relationship."}
+                  ? "State what happened, your role, and the outcome. Your rater will review it."
+                  : "State only what you observed. Your name is recorded."}
               </p>
               <label>{captureLane === "SOLDIER_ENTRY" ? "What happened?" : "What did you directly observe?"}</label>
               <textarea
@@ -767,7 +767,7 @@ export function MeritMobile() {
                 placeholder={captureLane === "SOLDIER_ENTRY" ? "Example: Led a squad through range density validation; corrected discrepancies before live-fire training." : "Example: On 18 July, led the pre-combat check and identified two missing crew-served weapon components before movement."}
                 onChange={(event) => setDraft({ ...draft, rawText: event.target.value })}
               />
-              <div className="counter"><span>Use the outcome, scale, and your role.</span><span>{draft.rawText.length} / 500</span></div>
+              <div className="counter"><span>Include outcome, scale, and role.</span><span>{draft.rawText.length} / 500</span></div>
 
               {captureLane === "RATER_OBSERVATION" && (
                 <>
@@ -824,10 +824,10 @@ export function MeritMobile() {
           <div className="screen formScreen">
             <Subhead eyebrow="NEW ENTRY" title="Add supporting evidence" count="2 / 2" onBack={() => setScreen("capture")} />
             <div className="content">
-              <div className="notice"><b>i</b><span>Evidence is optional. It supports leader review, but it does not determine a rating.</span></div>
-              <div className="policyWarning"><strong>Before taking a photo</strong><span>Do not upload classified information, controlled operational material, medical records, or evidence containing unnecessary personal information.</span></div>
+              <div className="notice"><b>i</b><span>Evidence is optional and does not determine a rating.</span></div>
+              <div className="policyWarning"><strong>Upload limits</strong><span>Do not upload classified, operational, medical, or unnecessary personal information.</span></div>
               <label className="upload" htmlFor="evidenceFile">
-                <span>↑</span><strong>Attach proof</strong><small>Up to 3 JPEG, PNG, WEBP, HEIC, or PDF files · 20 MB each</small>
+                <span>↑</span><strong>Attach evidence</strong><small>Up to 3 image or PDF files · 20 MB each</small>
                 <input id="evidenceFile" type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf" onChange={(event) => void chooseFile(event)} />
               </label>
               <div className="uploadOptions">
@@ -851,7 +851,7 @@ export function MeritMobile() {
                   disabled={!draft.artifacts.length}
                   onChange={(event) => setDraft({ ...draft, flaggedByServiceMember: event.target.checked })}
                 />
-                <span>This evidence may not yet be reflected correctly in an authoritative record.</span>
+                <span>An official record may be incorrect or incomplete.</span>
               </label>
               {draft.flaggedByServiceMember && (
                 <textarea
@@ -881,14 +881,12 @@ export function MeritMobile() {
             <Subhead title="MERIT" onBack={() => setScreen("home")} close />
             <div className="success">
               <span className="successIcon">✓</span>
-              <p className="eyebrow dark">{captureLane === "RATER_OBSERVATION" ? "PRIVATE OBSERVATION RECORDED" : "ENTRY SUBMITTED"}</p>
-              <h1>{captureLane === "RATER_OBSERVATION" ? "Direct context preserved." : "Captured while it was fresh."}</h1>
+              <h1>{captureLane === "RATER_OBSERVATION" ? "Observation saved" : "Entry submitted"}</h1>
               <p>{captureLane === "RATER_OBSERVATION"
-                ? `Your observation about ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? "the Soldier"} remains private until discussed and released through counseling.`
-                : "Your accomplishment is self-reported evidence awaiting rater review. The rater can confirm it, request clarification, or mark it not used."}</p>
+                ? `Private until released in counseling with ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? "the Soldier"}.`
+                : "Your rater can confirm it, request changes, or mark it not used."}</p>
               {submissionWarning && <p className="submissionWarning">{submissionWarning}</p>}
               <SubmissionProgress state={submissionState} hasEvidence={Boolean(selected?.artifacts.length || failedArtifacts.length)} />
-              <div className="card audit"><span>⌁</span><div><strong>{captureLane === "RATER_OBSERVATION" ? "Observer-attributed record created" : "Evidence trail created"}</strong><small>{captureLane === "RATER_OBSERVATION" ? "Private until counseling release" : `Submitted by ${selected?.submittedBy ?? "you"}`}</small></div></div>
               {failedArtifacts.length > 0 && <button className="secondaryWide" disabled={busy} onClick={() => void retryEvidence()}>{busy ? "Retrying evidence…" : `Retry ${failedArtifacts.length} failed upload${failedArtifacts.length === 1 ? "" : "s"}`}</button>}
               {selected && <button className="secondaryWide" onClick={() => openEntry(selected)}>View submitted entry</button>}
             </div>
@@ -964,7 +962,7 @@ export function MeritMobile() {
                   {artifact.flaggedByServiceMember && <p className="warning">Soldier disclosure: {artifact.flagNote || "Verification requested."}</p>}
                 </div>
               ))}
-              <div className="reviewBoundary"><b>Leader review remains independent</b><p>Evidence provides context. It does not prove a rating or replace rater judgment.</p></div>
+              <div className="reviewBoundary"><b>Rater decision</b><p>Evidence adds context. The rater decides the rating.</p></div>
               {selected.confirmationStatus === "UNREVIEWED" && !selected.usedInEvalId && (
                 <section className="withdrawEntry">
                   {!showWithdraw ? <button onClick={() => setShowWithdraw(true)}>Withdraw this unreviewed entry</button> : <><label htmlFor="withdrawalReason">Withdrawal reason <em>Optional</em></label><textarea id="withdrawalReason" rows={2} value={withdrawalReason} onChange={(event) => setWithdrawalReason(event.target.value)} /><div><button disabled={busy} onClick={() => void withdrawEntry()}>{busy ? "Withdrawing…" : "Confirm withdrawal"}</button><button onClick={() => setShowWithdraw(false)}>Cancel</button></div></>}
@@ -985,8 +983,8 @@ export function MeritMobile() {
               <textarea id="clarificationResponse" rows={3} value={clarificationResponse} placeholder="Explain what you corrected or clarified." onChange={(event) => setClarificationResponse(event.target.value)} />
               <label htmlFor="correctedEntry">Corrected accomplishment</label>
               <textarea id="correctedEntry" rows={5} maxLength={5000} value={draft.rawText} onChange={(event) => setDraft({ ...draft, rawText: event.target.value })} />
-              <div className="policyWarning"><strong>Replacement evidence</strong><span>Optional. Do not upload classified information, controlled operational material, medical records, or evidence containing unnecessary personal information.</span></div>
-              <label className="upload compactUpload" htmlFor="clarificationEvidence"><span>↑</span><strong>Add replacement evidence</strong><small>Up to 3 classified artifacts · 20 MB each</small><input id="clarificationEvidence" type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf" onChange={(event) => void chooseFile(event)} /></label>
+              <div className="policyWarning"><strong>Replacement evidence</strong><span>Optional. Do not upload classified, operational, medical, or unnecessary personal information.</span></div>
+              <label className="upload compactUpload" htmlFor="clarificationEvidence"><span>↑</span><strong>Add replacement evidence</strong><small>Up to 3 image or PDF files · 20 MB each</small><input id="clarificationEvidence" type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf" onChange={(event) => void chooseFile(event)} /></label>
               {draft.artifacts.map((artifact) => <div className="proof" key={artifact.id}><span className="fileIcon">{artifact.file.type.startsWith("image/") ? "IMG" : "PDF"}</span><span><strong>{artifact.file.name}</strong><small>{bytes(artifact.file.size)} · Replacement evidence</small><select aria-label={`Evidence type for ${artifact.file.name}`} value={artifact.type} onChange={(event) => setDraft((current) => ({ ...current, artifacts: current.artifacts.map((item) => item.id === artifact.id ? { ...item, type: event.target.value as ArtifactType } : item) }))}>{artifactTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></span><button aria-label={`Remove ${artifact.file.name}`} onClick={() => setDraft((current) => ({ ...current, artifacts: current.artifacts.filter((item) => item.id !== artifact.id) }))}>×</button></div>)}
               {error && <p className="error">{error}</p>}
             </div>
@@ -1000,11 +998,10 @@ export function MeritMobile() {
       </section>
 
       <aside className="demoNotes">
-        <p className="eyebrow dark">{currentDemoProfile?.roleLabel ?? "MERIT MOBILE"}</p>
-        <h2>{currentDemoProfile?.identityLabel ?? "The capture layer"}</h2>
-        <p>{currentDemoProfile?.description ?? "A focused field workflow that feeds the same support-form record used by the full MERIT platform."}</p>
+        <p className="eyebrow dark">QUICK DEMO</p>
+        <h2>{currentDemoProfile?.identityLabel ?? "MERIT Mobile"}</h2>
         <ol>{demoViewSteps(demoProfileId).map((step) => <li key={step}>{step}</li>)}</ol>
-        <p className="demoMode">Demo mode uses local browser storage. Production mode writes through the authorized MERIT support-form and evidence routes.</p>
+        <p className="demoMode">Synthetic data. Saved in this browser only.</p>
       </aside>
     </main>
   );
@@ -1012,19 +1009,19 @@ export function MeritMobile() {
 
 function demoViewSteps(profileId: DemoProfileId | null): string[] {
   if (profileId === "leader") return [
-    "Maintain your own record as a rated Soldier.",
-    "Observe Soldiers only within your authorized roster.",
-    "Keep observations attributable and private until counseling release.",
+    "Tap Capture to log your work.",
+    "Choose SGT Davis under Observe a Soldier.",
+    "Record what you directly saw.",
   ];
   if (profileId === "pilot_owner") return [
-    "Open the pilot-wide aggregate.",
-    "Review adoption, speed, reliability, and workflow outcomes.",
-    "Measure the pilot without opening personnel narratives or ranking people.",
+    "Open Pilot impact.",
+    "Switch between 30 and 90 days.",
+    "Review adoption, time, and outcomes.",
   ];
   return [
-    "Capture the accomplishment when it happens.",
-    "Attach a photo or document and disclose discrepancies.",
-    "Submit it for independent rater review.",
+    "Tap Capture.",
+    "Add the event and optional evidence.",
+    "Submit for rater review.",
   ];
 }
 
@@ -1034,12 +1031,12 @@ function DemoLogin({ onSelect }: { onSelect: (profileId: DemoProfileId) => void 
       <section className="demoLoginCard" aria-labelledby="demoLoginTitle">
         <div className="demoLoginHeader">
           <div className="brand"><img src="/army-star.jpg" alt="" /> MERIT</div>
-          <span>INTERACTIVE DEMONSTRATION</span>
+          <span>DEMO</span>
         </div>
         <div className="demoLoginIntro">
           <p className="eyebrow dark">MERIT MOBILE</p>
           <h1 id="demoLoginTitle">Choose a profile</h1>
-          <p>Compare the Soldier, Leader, and private Pilot Owner views. A person can be both rated and a leader; pilot analytics are a separate access boundary.</p>
+          <p>Select a role to view its access.</p>
         </div>
         <div className="demoProfileGrid">
           {demoProfiles.map((profile) => (
@@ -1055,7 +1052,7 @@ function DemoLogin({ onSelect }: { onSelect: (profileId: DemoProfileId) => void 
             </button>
           ))}
         </div>
-        <p className="demoDisclosure"><strong>Staged demonstration:</strong> Names, records, and measures are synthetic and stay in this browser. No Army account, live MERIT API, or production database is used.</p>
+        <p className="demoDisclosure"><strong>Demo only:</strong> Synthetic data stays in this browser. No Army systems are connected.</p>
       </section>
     </main>
   );
@@ -1135,7 +1132,7 @@ function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
     <>
       <div className={`dataBanner ${summary.dataStatus === "SYNTHETIC_DEMO" ? "demo" : "live"}`}>
         <strong>{summary.dataStatus === "SYNTHETIC_DEMO" ? "Illustrative pilot data" : "Live pilot-wide aggregate"}</strong>
-        <span>{summary.dataStatus === "SYNTHETIC_DEMO" ? "Seeded to demonstrate the platform view; not an Army result." : `${summary.scope.unitCount} unit${summary.scope.unitCount === 1 ? "" : "s"} in scope.`}</span>
+        <span>{summary.dataStatus === "SYNTHETIC_DEMO" ? "Synthetic data; not an Army result." : `${summary.scope.unitCount} unit${summary.scope.unitCount === 1 ? "" : "s"} in scope.`}</span>
       </div>
 
       <section className="impactKpis" aria-label="Pilot headline measures">
@@ -1146,11 +1143,11 @@ function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
       </section>
 
       <section className="impactSection">
-        <div className="impactTitle"><div><p className="eyebrow dark">OPERATIONAL VALUE</p><h2>Record-to-evaluation chain</h2></div><span>{summary.period.days} days</span></div>
+        <div className="impactTitle"><div><p className="eyebrow dark">OUTCOMES</p><h2>Record use</h2></div><span>{summary.period.days} days</span></div>
         <div className="valueChain">
           {valueSteps.map((step) => <div className="valueStep" key={step.label}><div><span>{step.label}</span><strong>{step.value}</strong></div><div className="valueBar"><span style={{ width: `${Math.min(100, step.width)}%` }} /></div></div>)}
         </div>
-        <p className="sectionNote">Use in an evaluation is the strongest product outcome shown here. It does not imply a particular rating.</p>
+        <p className="sectionNote">Evaluation use does not indicate rating.</p>
       </section>
 
       <section className="impactSection">
@@ -1161,7 +1158,7 @@ function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
       </section>
 
       <section className="impactSection">
-        <div className="impactTitle"><div><p className="eyebrow dark">RECORD QUALITY</p><h2>Useful context, not activity theater</h2></div></div>
+        <div className="impactTitle"><div><p className="eyebrow dark">QUALITY</p><h2>Coverage and review</h2></div></div>
         <div className="qualityGrid">
           <article><strong>{summary.quality.evidenceBackedPercent}%</strong><span>Evidence-backed entries</span><small>{summary.quality.evidenceBackedEntries} entries</small></article>
           <article><strong>{summary.quality.goalLinkedPercent}%</strong><span>Goal-linked records</span><small>{summary.quality.goalLinkedRecords} records</small></article>
@@ -1174,10 +1171,10 @@ function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
       </section>
 
       <section className="baselineCard">
-        <span>△</span><div><strong>Do not claim saved hours yet</strong><p>{summary.speed.timeSavings.message}</p><small>Next pilot instrument: time the current monthly support-form and evaluation-prep process before MERIT.</small></div>
+        <span>△</span><div><strong>Savings baseline needed</strong><p>{summary.speed.timeSavings.message}</p><small>Time the current process before claiming hours saved.</small></div>
       </section>
 
-      <p className="privacyNote">{summary.privacy.message} Sample: {summary.sampleSize.mobileRecords} records and {summary.sampleSize.telemetryEvents} workflow events.</p>
+      <p className="privacyNote">Aggregate only. Sample: {summary.sampleSize.mobileRecords} records and {summary.sampleSize.telemetryEvents} workflow events.</p>
     </>
   );
 }
