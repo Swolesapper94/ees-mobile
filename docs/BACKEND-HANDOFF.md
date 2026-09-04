@@ -27,7 +27,9 @@ support form and therefore be both rated and an observer at the same time:
 2. Select an evaluation's linked support form and rated Soldier.
 3. Submit a direct factual observation through
    `POST /api/support-forms/:formId/observations`.
-4. Keep the observation attributable and private until it is discussed
+4. Upload optional image/PDF evidence through
+   `POST /api/support-forms/:formId/observations/:observationId/artifacts`.
+5. Keep the observation and evidence attributable and private until discussed
    and released through counseling in the full MERIT workspace.
 
 For the initial pilot, the authorized observation roster is intentionally
@@ -51,16 +53,27 @@ or upward observation policy remains deferred.
 - `support_form_entry_artifacts.aiCaptionStatus`
 - `support_form_entry_artifacts.flaggedByServiceMember`
 - `support_form_entry_artifacts.flagNote`
+- `performance_observation_artifacts.observationId`
+- `performance_observation_artifacts.type`
+- `performance_observation_artifacts.fileUrl`
+- `performance_observation_artifacts.fileType`
+- `performance_observation_artifacts.aiCaptionStatus`
 - optional `goal_entry_links`
 
 ## Implemented integration seam
 
-Implement only the two methods in `src/lib/ees-gateway.ts`:
+`src/lib/ees-gateway.ts` owns the mobile API boundary:
 
 ```ts
 interface EesGateway {
   bootstrap(): Promise<MobileBootstrap>;
-  createEntry(draft: CaptureDraft): Promise<PerformanceEntry>;
+  createEntry(draft: CaptureDraft): Promise<{ entry: PerformanceEntry }>;
+  createObservation(draft: ObservationDraft): Promise<{ observationId: string }>;
+  retryObservationEvidence(
+    observationId: string,
+    supportFormId: string,
+    artifacts: DraftArtifact[],
+  ): Promise<DraftArtifact[]>;
 }
 ```
 
@@ -73,6 +86,7 @@ Production mode maps these methods to the existing authenticated backend routes:
 - `POST /api/support-forms/:formId/entries/:entryId/artifacts`
 - `GET /api/evaluations?role=rater`
 - `POST /api/support-forms/:formId/observations`
+- `POST /api/support-forms/:formId/observations/:observationId/artifacts`
 
 The app establishes its own Supabase browser session through the same project
 used by MERIT web, persists only access/refresh tokens in its own origin, and
@@ -95,7 +109,8 @@ upload as separate requests. Preserve failure states explicitly:
 
 - The rated Soldier may submit factual entries and evidence.
 - A leader may simultaneously maintain their own rated-Soldier record and
-  observe Soldiers inside their authorized roster.
+  observe Soldiers inside their authorized roster, with optional supporting
+  evidence attached to the observation.
 - Evidence does not calculate, recommend, or determine a rating.
 - The assigned rater independently confirms, requests clarification, or marks
   an entry not used.

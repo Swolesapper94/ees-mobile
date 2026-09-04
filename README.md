@@ -18,8 +18,9 @@ record of their own; these capabilities are not mutually exclusive.
 - **Leader / authorized observer:** has the Soldier capability above and may
    record direct factual observations for Soldiers in an authorized roster. In
    the current pilot backend, that roster is derived from formal rater
-   assignments. Observations retain observer attribution and remain private
-   until discussed and released through counseling.
+   assignments. Leaders may attach up to three images or PDFs. Observations
+   and their evidence retain observer attribution and remain private until
+   discussed and released through counseling.
 - **Rating official:** reviews Soldier-submitted entries for the Soldiers in
    their rating relationship. This is a relationship, not a separate identity.
 - **Pilot Owner:** sees aggregate adoption, speed, reliability, and workflow
@@ -47,7 +48,8 @@ The default demo mode is self-contained:
 
 - a profile-based sign-in screen opens the Soldier, Leader, or Pilot Owner view;
 - the persistent demo profile control switches views without a rebuild or separate URL;
-- the Leader has both a personal record and an authorized observer lane;
+- the Leader has both a personal record and an authorized observer lane with
+  optional image/PDF evidence;
 - only the Pilot Owner can open the private aggregate pilot-impact dashboard;
 - unfinished drafts, including selected evidence blobs, persist in IndexedDB;
 - image/PDF selection is real;
@@ -86,11 +88,11 @@ cd ../ees2-frontend
 Production mode maps the existing authenticated routes in
 `src/lib/ees-gateway.ts`: active support-form lookup, goal lookup,
 `ACCOMPLISHMENT` creation, multipart artifact upload, assigned-rater discovery,
-and rater observation creation. It does not create a parallel mobile-only
-backend contract. Supabase Auth establishes the session; the mobile app sends
-that token to the MERIT API, and the API owns access to operational database
-records and private evidence. The browser never receives a service-role key or
-writes directly to the protected tables.
+and rater observation/evidence creation. It does not create a parallel
+mobile-only backend contract. Supabase Auth establishes the session; the
+mobile app sends that token to the MERIT API, and the API owns access to
+operational database records and private evidence. The browser never receives
+a service-role key or writes directly to the protected tables.
 
 During local development, the sign-in screen also offers Davis and Johnson
 development identities. Those shortcuts use the backend's development-only
@@ -103,7 +105,7 @@ boundaries.
 
 1. Home / support-form status and goal-based readiness
 2. Accomplishment details
-3. Up-to-three classified evidence attachments and attestation
+3. Up to three image/PDF evidence attachments and attestation
 4. Separate entry-save, evidence-upload, and analysis states
 5. Performance record
 6. Entry/evidence detail
@@ -114,6 +116,8 @@ boundaries.
 - Event dates must be within the active rating period and cannot be future-dated.
 - Goals come only from the active support form and are filtered by leadership dimension.
 - A discrepancy requires attached evidence and a written explanation.
+- An assigned rater may attach image/PDF evidence to their own observation.
+  It follows the observation's counseling-release boundary.
 - JPEG, PNG, WEBP, HEIC/HEIF (when browser-decodable), and PDF are accepted; images are rotated, resized, re-encoded as JPEG, and stripped of metadata before upload.
 - Entry creation is idempotent and guarded against double taps. Upload failure never removes the saved entry; analysis failure never removes secured evidence.
 - Soldier entries are editable or withdrawable only while unreviewed. Clarification corrections increment the source version and preserve the original submission in audit history. Evidence used in an evaluation is locked.

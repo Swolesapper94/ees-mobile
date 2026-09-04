@@ -206,6 +206,7 @@ export function MeritMobile() {
   const [submissionWarning, setSubmissionWarning] = useState("");
   const [submissionState, setSubmissionState] = useState<SubmissionState>("IDLE");
   const [failedArtifacts, setFailedArtifacts] = useState<DraftArtifact[]>([]);
+  const [savedObservationId, setSavedObservationId] = useState("");
   const [clarificationResponse, setClarificationResponse] = useState("");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
@@ -242,9 +243,9 @@ export function MeritMobile() {
   }, [demoProfileId, refresh]);
 
   useEffect(() => {
-    if (!data?.supportForm || !["capture", "evidence"].includes(screen)) return;
+    if (captureLane !== "SOLDIER_ENTRY" || !data?.supportForm || !["capture", "evidence"].includes(screen)) return;
     void saveDraftLocally(data.supportForm.id, draft);
-  }, [data?.supportForm, draft, screen]);
+  }, [captureLane, data?.supportForm, draft, screen]);
 
   const pending = useMemo(
     () => data?.entries.filter((entry) => entry.confirmationStatus === "UNREVIEWED") ?? [],
@@ -290,6 +291,9 @@ export function MeritMobile() {
     if (!data?.supportForm) return;
     setCaptureLane("SOLDIER_ENTRY");
     setRaterTarget(null);
+    setSavedObservationId("");
+    setFailedArtifacts([]);
+    setSubmissionWarning("");
     const recoveredDraft = await loadDraftLocally(data.supportForm.id);
     const nextDraft = recoveredDraft ?? emptyDraft();
     setDraft(nextDraft);
@@ -303,6 +307,10 @@ export function MeritMobile() {
   function startObservation(target: RaterAssignment) {
     setCaptureLane("RATER_OBSERVATION");
     setRaterTarget(target);
+    setSelected(null);
+    setSavedObservationId("");
+    setFailedArtifacts([]);
+    setSubmissionWarning("");
     setFeedbackType("NEUTRAL");
     const nextDraft = emptyDraft();
     setDraft(nextDraft);
@@ -333,10 +341,11 @@ export function MeritMobile() {
   }
 
   function validateEventDate() {
-    if (!data?.supportForm) return "No active support form is available.";
     const eventDate = draft.eventDate.slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
     if (eventDate > today) return "The event date cannot be in the future.";
+    if (captureLane === "RATER_OBSERVATION") return "";
+    if (!data?.supportForm) return "No active support form is available.";
     if (eventDate < data.supportForm.ratingPeriodStart.slice(0, 10) || eventDate > data.supportForm.ratingPeriodEnd.slice(0, 10)) {
       return "The event date must fall within the active rating period.";
     }
@@ -344,7 +353,7 @@ export function MeritMobile() {
   }
 
   function continueToEvidence() {
-    if (!draft.rawText.trim()) return setError("Describe the accomplishment to continue.");
+    if (!draft.rawText.trim()) return setError(captureLane === "RATER_OBSERVATION" ? "Describe the observation to continue." : "Describe the accomplishment to continue.");
     const dateError = validateEventDate();
     if (dateError) return setError(dateError);
     setError("");
@@ -459,11 +468,20 @@ export function MeritMobile() {
       setError("Record the factual observation before submitting.");
       return;
     }
+    if (!draft.attested) {
+      setError("Confirm the observation is factual before saving.");
+      return;
+    }
+    const dateError = validateEventDate();
+    if (dateError) return setError(dateError);
+    if (busy || submissionLock.current) return;
+    submissionLock.current = true;
     setBusy(true);
     setError("");
+    setSubmissionWarning("");
     let recordCreated = false;
     try {
-      await eesGateway.createObservation({
+      const result = await eesGateway.createObservation({
         clientRequestId: draft.clientRequestId,
         supportFormId: raterTarget.supportFormId,
         factualNote: draft.rawText,
@@ -471,15 +489,43 @@ export function MeritMobile() {
         feedbackType,
         occurredAt: draft.eventDate,
         goalId: draft.goalId || undefined,
-      });
+        artifacts: draft.artifacts,
+      }, setSubmissionState);
       recordCreated = true;
-      recordPilotEvent("WORKFLOW_COMPLETED", { hasEvidence: false, evidenceCount: 0 });
+      recordPilotEvent("WORKFLOW_COMPLETED", { hasEvidence: draft.artifacts.length > 0, evidenceCount: draft.artifacts.length });
+      setSubmissionWarning(result.uploadWarning ?? "");
+      setFailedArtifacts(result.failedArtifacts);
+      setSavedObservationId(result.observationId);
       setSelected(null);
       setScreen("success");
     } catch (cause: unknown) {
-      if (!recordCreated) recordPilotEvent("WORKFLOW_FAILED", { hasEvidence: false, evidenceCount: 0 });
+      if (!recordCreated) recordPilotEvent("WORKFLOW_FAILED", { hasEvidence: draft.artifacts.length > 0, evidenceCount: draft.artifacts.length });
       setError(cause instanceof Error ? cause.message : "Observation submission failed.");
     } finally {
+      submissionLock.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function retryObservationEvidence() {
+    if (!savedObservationId || !raterTarget || !failedArtifacts.length || busy || submissionLock.current) return;
+    submissionLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const failed = await eesGateway.retryObservationEvidence(
+        savedObservationId,
+        raterTarget.supportFormId,
+        failedArtifacts,
+        setSubmissionState,
+      );
+      setFailedArtifacts(failed);
+      setSubmissionWarning(failed.length ? "Evidence upload failed again. The observation remains saved." : "");
+    } catch (cause) {
+      setSubmissionState("UPLOAD_FAILED");
+      setSubmissionWarning(cause instanceof Error ? cause.message : "Evidence upload failed. The observation remains saved.");
+    } finally {
+      submissionLock.current = false;
       setBusy(false);
     }
   }
@@ -552,6 +598,7 @@ export function MeritMobile() {
     setRaterTarget(null);
     setSubmissionWarning("");
     setFailedArtifacts([]);
+    setSavedObservationId("");
     activePilotWorkflow.current = null;
     try {
       await refresh();
@@ -569,6 +616,8 @@ export function MeritMobile() {
     setSelected(null);
     setPilotSummary(null);
     setShowProfileSwitcher(false);
+    setSavedObservationId("");
+    setFailedArtifacts([]);
     activePilotWorkflow.current = null;
   }
 
@@ -750,7 +799,7 @@ export function MeritMobile() {
             <Subhead
               eyebrow={captureLane === "SOLDIER_ENTRY" ? "PERSONAL RECORD" : `AUTHORIZED OBSERVATION · ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? ""}`}
               title={captureLane === "SOLDIER_ENTRY" ? "Capture accomplishment" : "Record observation"}
-              count={captureLane === "SOLDIER_ENTRY" ? "1 / 2" : undefined}
+              count="1 / 2"
               onBack={() => setScreen("home")}
             />
             <div className="content">
@@ -810,11 +859,9 @@ export function MeritMobile() {
               <button
                 className="primary"
                 disabled={busy}
-                onClick={() => captureLane === "RATER_OBSERVATION"
-                  ? void submitObservation()
-                  : continueToEvidence()}
+                onClick={continueToEvidence}
               >
-                {captureLane === "RATER_OBSERVATION" ? (busy ? "Recording…" : "Record private observation") : "Continue to evidence →"}
+                Continue to evidence →
               </button>
             </footer>
           </div>
@@ -822,9 +869,9 @@ export function MeritMobile() {
 
         {screen === "evidence" && (
           <div className="screen formScreen">
-            <Subhead eyebrow="NEW ENTRY" title="Add supporting evidence" count="2 / 2" onBack={() => setScreen("capture")} />
+            <Subhead eyebrow={captureLane === "SOLDIER_ENTRY" ? "NEW ENTRY" : "OBSERVATION"} title="Add supporting evidence" count="2 / 2" onBack={() => setScreen("capture")} />
             <div className="content">
-              <div className="notice"><b>i</b><span>Evidence is optional and does not determine a rating.</span></div>
+              <div className="notice"><b>i</b><span>{captureLane === "SOLDIER_ENTRY" ? "Evidence is optional and does not determine a rating." : "Evidence is optional and stays with this observation."}</span></div>
               <div className="policyWarning"><strong>Upload limits</strong><span>Do not upload classified, operational, medical, or unnecessary personal information.</span></div>
               <label className="upload" htmlFor="evidenceFile">
                 <span>↑</span><strong>Attach evidence</strong><small>Up to 3 image or PDF files · 20 MB each</small>
@@ -844,22 +891,26 @@ export function MeritMobile() {
                 </div>
               ))}
 
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={draft.flaggedByServiceMember}
-                  disabled={!draft.artifacts.length}
-                  onChange={(event) => setDraft({ ...draft, flaggedByServiceMember: event.target.checked })}
-                />
-                <span>An official record may be incorrect or incomplete.</span>
-              </label>
-              {draft.flaggedByServiceMember && (
-                <textarea
-                  rows={3}
-                  placeholder="Explain the discrepancy or what the rater should verify."
-                  value={draft.flagNote ?? ""}
-                  onChange={(event) => setDraft({ ...draft, flagNote: event.target.value })}
-                />
+              {captureLane === "SOLDIER_ENTRY" && (
+                <>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={draft.flaggedByServiceMember}
+                      disabled={!draft.artifacts.length}
+                      onChange={(event) => setDraft({ ...draft, flaggedByServiceMember: event.target.checked })}
+                    />
+                    <span>An official record may be incorrect or incomplete.</span>
+                  </label>
+                  {draft.flaggedByServiceMember && (
+                    <textarea
+                      rows={3}
+                      placeholder="Explain the discrepancy or what the rater should verify."
+                      value={draft.flagNote ?? ""}
+                      onChange={(event) => setDraft({ ...draft, flagNote: event.target.value })}
+                    />
+                  )}
+                </>
               )}
 
               <label className="check attestation">
@@ -868,11 +919,11 @@ export function MeritMobile() {
                   checked={draft.attested}
                   onChange={(event) => setDraft({ ...draft, attested: event.target.checked })}
                 />
-                <span>I certify this entry is factual to the best of my knowledge.</span>
+                <span>{captureLane === "SOLDIER_ENTRY" ? "I certify this entry is factual to the best of my knowledge." : "I confirm this observation is factual."}</span>
               </label>
               {error && <p className="error">{error}</p>}
             </div>
-            <footer className="fixed"><button className="primary" disabled={busy} onClick={submit}>{busy ? submissionLabel(submissionState) : "Submit for rater review →"}</button></footer>
+            <footer className="fixed"><button className="primary" disabled={busy} onClick={() => captureLane === "RATER_OBSERVATION" ? void submitObservation() : void submit()}>{busy ? submissionLabel(submissionState) : captureLane === "RATER_OBSERVATION" ? "Save observation" : "Submit for rater review →"}</button></footer>
           </div>
         )}
 
@@ -886,8 +937,8 @@ export function MeritMobile() {
                 ? `Private until released in counseling with ${raterTarget?.rank ?? ""} ${raterTarget?.displayName ?? "the Soldier"}.`
                 : "Your rater can confirm it, request changes, or mark it not used."}</p>
               {submissionWarning && <p className="submissionWarning">{submissionWarning}</p>}
-              <SubmissionProgress state={submissionState} hasEvidence={Boolean(selected?.artifacts.length || failedArtifacts.length)} />
-              {failedArtifacts.length > 0 && <button className="secondaryWide" disabled={busy} onClick={() => void retryEvidence()}>{busy ? "Retrying evidence…" : `Retry ${failedArtifacts.length} failed upload${failedArtifacts.length === 1 ? "" : "s"}`}</button>}
+              <SubmissionProgress state={submissionState} hasEvidence={Boolean(selected?.artifacts.length || draft.artifacts.length || failedArtifacts.length)} />
+              {failedArtifacts.length > 0 && <button className="secondaryWide" disabled={busy} onClick={() => captureLane === "RATER_OBSERVATION" ? void retryObservationEvidence() : void retryEvidence()}>{busy ? "Retrying evidence…" : `Retry ${failedArtifacts.length} failed upload${failedArtifacts.length === 1 ? "" : "s"}`}</button>}
               {selected && <button className="secondaryWide" onClick={() => openEntry(selected)}>View submitted entry</button>}
             </div>
             <footer className="fixed"><button className="primary" onClick={() => setScreen("home")}>Done</button></footer>
@@ -1160,7 +1211,7 @@ function PilotImpactDashboard({ summary }: { summary: PilotKpiSummary }) {
       <section className="impactSection">
         <div className="impactTitle"><div><p className="eyebrow dark">QUALITY</p><h2>Coverage and review</h2></div></div>
         <div className="qualityGrid">
-          <article><strong>{summary.quality.evidenceBackedPercent}%</strong><span>Evidence-backed entries</span><small>{summary.quality.evidenceBackedEntries} entries</small></article>
+          <article><strong>{summary.quality.evidenceBackedPercent}%</strong><span>Evidence-backed records</span><small>{summary.quality.evidenceBackedEntries} records</small></article>
           <article><strong>{summary.quality.goalLinkedPercent}%</strong><span>Goal-linked records</span><small>{summary.quality.goalLinkedRecords} records</small></article>
           <article><strong>{summary.quality.medianReviewLagHours === null ? "—" : `${Math.round(summary.quality.medianReviewLagHours)}h`}</strong><span>Median review lag</span><small>n={summary.quality.measuredReviews} reviewed</small></article>
           <article><strong>{summary.quality.needsClarification}</strong><span>Clarifications</span><small>{summary.quality.awaitingReview} awaiting review</small></article>

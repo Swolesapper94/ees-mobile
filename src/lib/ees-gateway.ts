@@ -79,6 +79,10 @@ interface ApiRaterEvaluation {
   } | null;
 }
 
+interface ApiObservation {
+  id: string;
+}
+
 const DEMO_TODAY = new Date().toISOString().slice(0, 10);
 const DEMO_YEAR = new Date().getUTCFullYear();
 const DEMO_PERIOD_START = `${DEMO_YEAR}-01-01`;
@@ -379,7 +383,8 @@ export interface EesGateway {
   retryEvidence(entry: PerformanceEntry, draft: CaptureDraft, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; failedArtifacts: DraftArtifact[] }>;
   resubmitClarification(entry: PerformanceEntry, draft: CaptureDraft, response: string, onState?: (state: SubmissionState) => void): Promise<{ entry: PerformanceEntry; failedArtifacts: DraftArtifact[] }>;
   withdrawEntry(entry: PerformanceEntry, reason?: string): Promise<void>;
-  createObservation(draft: ObservationDraft): Promise<void>;
+  createObservation(draft: ObservationDraft, onState?: (state: SubmissionState) => void): Promise<{ observationId: string; uploadWarning?: string; failedArtifacts: DraftArtifact[] }>;
+  retryObservationEvidence(observationId: string, supportFormId: string, artifacts: DraftArtifact[], onState?: (state: SubmissionState) => void): Promise<DraftArtifact[]>;
   trackPilotEvent(event: PilotMetricEventInput): Promise<void>;
   pilotSummary(days?: number): Promise<PilotKpiSummary>;
 }
@@ -450,7 +455,7 @@ function demoPilotSummary(days = 30): PilotKpiSummary {
       positiveObservations: 20,
     },
     quality: {
-      evidenceBackedEntries: 51,
+      evidenceBackedEntries: 68,
       evidenceBackedPercent: 61,
       goalLinkedRecords: 72,
       goalLinkedPercent: 64,
@@ -514,12 +519,25 @@ const demoGateway: EesGateway = {
     data.entries = data.entries.filter((item) => item.id !== entry.id);
     writeDemoBootstrap(data);
   },
-  async createObservation(draft) {
+  async createObservation(draft, onState) {
     const data = readDemoBootstrap();
     const assigned = data.raterAssignments.some((assignment) => assignment.supportFormId === draft.supportFormId);
     if (!data.user.roles.includes("RATER") || !assigned) {
       throw new Error("Only a leader with an authorized Soldier relationship can record this observation.");
     }
+    onState?.("SAVING_ENTRY");
+    if (draft.artifacts.length) {
+      onState?.("UPLOADING_EVIDENCE");
+      onState?.("EVIDENCE_SECURED");
+    } else {
+      onState?.("ANALYSIS_COMPLETE");
+    }
+    return { observationId: crypto.randomUUID(), failedArtifacts: [] };
+  },
+  async retryObservationEvidence(_observationId, _supportFormId, _artifacts, onState) {
+    onState?.("UPLOADING_EVIDENCE");
+    onState?.("EVIDENCE_SECURED");
+    return [];
   },
   async trackPilotEvent(event) {
     const events = readDemoPilotEvents();
@@ -646,6 +664,35 @@ async function uploadArtifacts(
   return { uploadedIds, failedArtifacts };
 }
 
+async function uploadObservationArtifacts(
+  formId: string,
+  observationId: string,
+  artifacts: DraftArtifact[],
+  onState?: (state: SubmissionState) => void,
+): Promise<DraftArtifact[]> {
+  if (!artifacts.length) {
+    onState?.("ANALYSIS_COMPLETE");
+    return [];
+  }
+  onState?.("UPLOADING_EVIDENCE");
+  const failedArtifacts: DraftArtifact[] = [];
+  for (const artifact of artifacts) {
+    const upload = new FormData();
+    upload.set("file", artifact.file);
+    upload.set("type", artifact.type);
+    try {
+      await request(`/support-forms/${formId}/observations/${observationId}/artifacts`, {
+        method: "POST",
+        body: upload,
+      });
+    } catch {
+      failedArtifacts.push(artifact);
+    }
+  }
+  onState?.(failedArtifacts.length ? "UPLOAD_FAILED" : "EVIDENCE_SECURED");
+  return failedArtifacts;
+}
+
 const apiGateway: EesGateway = {
   async bootstrap() {
     const user = await request<ApiUser>("/users/me");
@@ -765,8 +812,9 @@ const apiGateway: EesGateway = {
       body: JSON.stringify({ reason: reason?.trim() || undefined }),
     });
   },
-  async createObservation(draft) {
-    await request(`/support-forms/${draft.supportFormId}/observations`, {
+  async createObservation(draft, onState) {
+    onState?.("SAVING_ENTRY");
+    const observation = await request<ApiObservation>(`/support-forms/${draft.supportFormId}/observations`, {
       method: "POST",
       body: JSON.stringify({
         clientRequestId: draft.clientRequestId,
@@ -778,6 +826,22 @@ const apiGateway: EesGateway = {
         tags: [],
       }),
     });
+    const failedArtifacts = await uploadObservationArtifacts(
+      draft.supportFormId,
+      observation.id,
+      draft.artifacts,
+      onState,
+    );
+    return {
+      observationId: observation.id,
+      failedArtifacts,
+      uploadWarning: failedArtifacts.length
+        ? `${failedArtifacts.length} evidence upload${failedArtifacts.length === 1 ? "" : "s"} failed. The observation is saved.`
+        : undefined,
+    };
+  },
+  async retryObservationEvidence(observationId, supportFormId, artifacts, onState) {
+    return uploadObservationArtifacts(supportFormId, observationId, artifacts, onState);
   },
   async trackPilotEvent(event) {
     await request("/pilot-metrics/events", { method: "POST", body: JSON.stringify(event) });

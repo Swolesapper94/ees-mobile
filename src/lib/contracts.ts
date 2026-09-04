@@ -101,6 +101,7 @@ export interface ObservationDraft {
   feedbackType: ObservationFeedbackType;
   occurredAt: string;
   goalId?: string;
+  artifacts: DraftArtifact[];
 }
 
 export interface MobileBootstrap {
