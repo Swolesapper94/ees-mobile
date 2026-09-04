@@ -39,6 +39,9 @@ the **Take photo** action opens the rear camera where the browser supports it.
 
 The default demo mode is self-contained:
 
+- a profile-based sign-in screen opens the Soldier, rater, or platform-administrator view;
+- the persistent demo profile control switches views without a rebuild or separate URL;
+- only the platform-administrator profile can open the aggregate pilot-impact dashboard;
 - unfinished drafts, including selected evidence blobs, persist in IndexedDB;
 - image/PDF selection is real;
 - upload and AI analysis use separate, explicit states;

@@ -21,6 +21,27 @@ html, body { margin: 0; min-height: 100%; background: #e5e9ee; color: var(--ink)
 button, input, textarea, select { font: inherit; }
 button, label[for] { cursor: pointer; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid #71a9e4; outline-offset: 2px; }
+.demoLoginStage { min-height: 100vh; display: grid; place-items: center; padding: 28px 20px; background: linear-gradient(145deg, #111b28 0%, #1e3a5f 58%, #263951 100%); }
+.demoLoginCard { width: min(100%, 520px); overflow: hidden; border: 1px solid #ffffff2e; border-radius: 16px; background: #f8fafc; box-shadow: 0 28px 70px #07111f66; }
+.demoLoginHeader { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; border-bottom: 4px solid var(--green); background: var(--navy); color: #fff; }
+.demoLoginHeader > span { color: #b9c8d8; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-align: right; }
+.demoLoginIntro { padding: 26px 24px 14px; }
+.demoLoginIntro h1 { margin: 7px 0 10px; color: var(--navy); font-size: 30px; line-height: 1.1; }
+.demoLoginIntro > p:last-child { margin: 0; color: #526174; font-size: 15px; line-height: 1.55; }
+.demoProfileGrid { display: grid; gap: 10px; padding: 10px 24px 18px; }
+.demoProfileCard { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 13px; width: 100%; min-height: 108px; padding: 14px; border: 1px solid #ccd5df; border-left: 4px solid var(--blue); border-radius: 9px; background: #fff; color: var(--ink); text-align: left; box-shadow: 0 1px 3px #0000000d; }
+.demoProfileCard:hover { border-color: #8ca8c2; background: #f7fafc; transform: translateY(-1px); }
+.demoProfileCard:active { transform: translateY(0); }
+.demoAvatar { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 10px; background: var(--navy-2); color: #fff; font-size: 15px; font-weight: 900; letter-spacing: .04em; }
+.demoProfileCopy { min-width: 0; }
+.demoProfileCopy small, .demoProfileCopy strong, .demoProfileCopy > span, .demoProfileCopy em { display: block; }
+.demoProfileCopy small { color: var(--blue); font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+.demoProfileCopy strong { margin-top: 3px; color: var(--navy); font-size: 16px; }
+.demoProfileCopy > span { margin-top: 5px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.demoProfileCopy em { width: max-content; margin-top: 7px; padding: 3px 7px; border-radius: 20px; background: #eef0f3; color: #64748b; font-size: 11px; font-style: normal; font-weight: 800; }
+.demoProfileCopy em.hasImpact { background: var(--green-soft); color: #3f5217; }
+.demoProfileCard > b { color: var(--blue); font-size: 28px; font-weight: 500; }
+.demoDisclosure { margin: 0; padding: 15px 24px 20px; border-top: 1px solid var(--line); background: #f1f4f7; color: #59687a; font-size: 12px; line-height: 1.45; }
 .loading { min-height: 100vh; display: grid; place-items: center; padding: 24px; font-weight: 800; color: var(--navy); }
 .loadingState { width: min(100%, 390px); padding: 24px; border: 1px solid var(--line); border-top: 4px solid var(--green); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 12px #0000001a; }
 .loadingState h1 { margin: 24px 0 8px; font-size: 22px; }
@@ -37,7 +58,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .devIdentities button { min-height: 36px; margin: 0; padding: 0 8px; border: 1px solid var(--line); background: #fff; color: var(--navy); font-size: 10px; }
 .stage { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 48px; padding: 32px 20px; }
 .phone { position: relative; width: 390px; height: 844px; overflow: hidden; border: 10px solid #111827; border-radius: 38px; background: var(--background); box-shadow: 0 20px 40px #00000029, 0 8px 16px #00000014; }
-.statusbar { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 10px 21px 0; background: var(--navy); color: #fff; font-size: 11px; font-weight: 800; }
+.statusbar { position: relative; z-index: 7; height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 18px 0; background: var(--navy); color: #fff; font-size: 11px; font-weight: 800; }
+.demoBadge { padding: 3px 6px; border: 1px solid #ffffff42; border-radius: 4px; color: #c9d5e1; font-size: 9px; letter-spacing: .08em; }
+.demoProfileTrigger { min-width: 0; overflow: hidden; padding: 3px 8px; border: 1px solid #ffffff38; border-radius: 20px; background: #ffffff12; color: #fff; font-size: 10px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.demoProfileTrigger span { margin-left: 3px; color: #aebdcb; }
+.demoProfileOverlay { position: absolute; z-index: 20; inset: 0; display: flex; align-items: flex-end; padding: 12px; background: #08111fcc; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.demoProfileSheet { width: 100%; max-height: calc(100% - 28px); overflow-y: auto; padding: 20px; border: 1px solid #d1d9e1; border-radius: 16px; background: #f8fafc; box-shadow: 0 -12px 34px #07111f59; }
+.demoProfileSheet > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.demoProfileSheet h2 { margin: 4px 0 0; color: var(--navy); font-size: 21px; }
+.demoProfileSheet > header > button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: #fff; color: var(--navy); font-size: 22px; line-height: 1; }
+.profileSwitcherHelp { margin: 11px 0 15px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.profileSwitcherList { display: grid; gap: 8px; }
+.profileSwitcherList > button { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 11px; width: 100%; padding: 11px; border: 1px solid #d2dae2; border-radius: 8px; background: #fff; color: var(--ink); text-align: left; }
+.profileSwitcherList > button.active { border-color: #789d83; background: #f1f6ed; box-shadow: inset 3px 0 var(--green); }
+.profileSwitcherList .demoAvatar { width: 42px; height: 42px; font-size: 13px; }
+.profileSwitcherList small, .profileSwitcherList strong, .profileSwitcherList em { display: block; }
+.profileSwitcherList small { color: var(--blue); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.profileSwitcherList strong { margin-top: 2px; color: var(--navy); font-size: 13px; }
+.profileSwitcherList em { margin-top: 3px; color: var(--muted); font-size: 10px; font-style: normal; }
+.profileSwitcherList b { color: var(--green); font-size: 18px; }
+.returnToLogin { width: 100%; min-height: 42px; margin-top: 14px; border: 1px solid #c7d0da; border-radius: 7px; background: transparent; color: var(--navy); font-size: 12px; font-weight: 900; }
 .screen { height: calc(100% - 32px); overflow-y: auto; padding-bottom: 58px; background: var(--background); }
 .screen::-webkit-scrollbar { width: 0; }
 .hero { min-height: 214px; padding: 19px 24px 30px; color: #fff; background: var(--navy); border-bottom: 4px solid var(--green); }
@@ -64,6 +104,7 @@ h1, h2, p { margin-top: 0; }
 .authorityStrip strong { float: right; color: var(--gold); }
 .authorityStrip p { clear: both; margin: 5px 0 0; color: #536052; font-size: 10px; line-height: 1.4; }
 .leaderCapture { margin-top: 18px; padding: 15px; border: 1px solid #cbd5e1; border-top: 3px solid var(--blue); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px #00000014; }
+.content.overlap > .leaderCapture:first-child { margin-top: 0; }
 .leaderCapture h2 { margin: 5px 0; font-size: 15px; }
 .leaderCapture > p:not(.eyebrow) { margin-bottom: 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .soldierChoices { display: grid; gap: 7px; }
@@ -284,6 +325,8 @@ dd { margin: 5px 0 0; color: #314256; font-size: 11px; font-weight: 800; }
 .demoMode code { font-size: 11px; }
 
 @media (max-width: 780px) {
+  .demoLoginStage { min-height: 100dvh; padding: 0; background: #f8fafc; }
+  .demoLoginCard { min-height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
   .stage { min-height: 100dvh; padding: 0; }
   .phone { width: 100%; max-width: 430px; height: 100dvh; min-height: 680px; border: 0; border-radius: 0; box-shadow: none; }
   .demoNotes { display: none; }

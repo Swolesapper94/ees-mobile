@@ -15,7 +15,14 @@ import {
   SubmissionState,
   leadershipDimensions,
 } from "../lib/contracts";
-import { eesGateway } from "../lib/ees-gateway";
+import {
+  DemoProfileId,
+  clearSelectedDemoProfile,
+  demoProfiles,
+  eesGateway,
+  readSelectedDemoProfileId,
+  selectDemoProfile,
+} from "../lib/ees-gateway";
 import { isMobileDemoMode, signInToMerit, useDevelopmentIdentity } from "../lib/auth";
 
 type Screen = "home" | "capture" | "evidence" | "success" | "record" | "detail" | "clarify" | "impact";
@@ -184,6 +191,7 @@ function formatDate(date: string) {
 }
 
 export function MeritMobile() {
+  const [demoProfileId, setDemoProfileId] = useState<DemoProfileId | null>(() => readSelectedDemoProfileId());
   const [screen, setScreen] = useState<Screen>("home");
   const [data, setData] = useState<MobileBootstrap | null>(null);
   const [draft, setDraft] = useState<CaptureDraft>(emptyDraft);
@@ -205,6 +213,7 @@ export function MeritMobile() {
   const [pilotDays, setPilotDays] = useState(30);
   const [pilotLoading, setPilotLoading] = useState(false);
   const [pilotError, setPilotError] = useState("");
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
   const submissionLock = useRef(false);
   const activePilotWorkflow = useRef<ActivePilotWorkflow | null>(null);
 
@@ -217,6 +226,7 @@ export function MeritMobile() {
   }, []);
 
   useEffect(() => {
+    if (isMobileDemoMode && !demoProfileId) return;
     refresh().catch((cause: unknown) =>
       setError(cause instanceof Error ? cause.message : "Unable to load MERIT Mobile."),
     );
@@ -229,7 +239,7 @@ export function MeritMobile() {
       window.removeEventListener("ees-demo-updated", update);
       window.clearInterval(poll);
     };
-  }, [refresh]);
+  }, [demoProfileId, refresh]);
 
   useEffect(() => {
     if (!data?.supportForm || !["capture", "evidence"].includes(screen)) return;
@@ -258,6 +268,11 @@ export function MeritMobile() {
   }
 
   async function openPilotImpact(days = pilotDays) {
+    if (!data?.canViewPilotImpact || data.user.applicationSupportRole !== "ADMINISTRATOR") {
+      setPilotSummary(null);
+      setScreen("home");
+      return;
+    }
     setPilotDays(days);
     setPilotLoading(true);
     setPilotError("");
@@ -522,6 +537,45 @@ export function MeritMobile() {
     }
   }
 
+  async function enterDemoProfile(profileId: DemoProfileId) {
+    selectDemoProfile(profileId);
+    setDemoProfileId(profileId);
+    setData(null);
+    setError("");
+    setScreen("home");
+    setSelected(null);
+    setPilotSummary(null);
+    setPilotError("");
+    setShowProfileSwitcher(false);
+    setDraft(emptyDraft());
+    setCaptureLane("SOLDIER_ENTRY");
+    setRaterTarget(null);
+    setSubmissionWarning("");
+    setFailedArtifacts([]);
+    activePilotWorkflow.current = null;
+    try {
+      await refresh();
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to open that demo profile.");
+    }
+  }
+
+  function returnToDemoLogin() {
+    clearSelectedDemoProfile();
+    setDemoProfileId(null);
+    setData(null);
+    setError("");
+    setScreen("home");
+    setSelected(null);
+    setPilotSummary(null);
+    setShowProfileSwitcher(false);
+    activePilotWorkflow.current = null;
+  }
+
+  if (isMobileDemoMode && !demoProfileId) {
+    return <DemoLogin onSelect={(profileId) => void enterDemoProfile(profileId)} />;
+  }
+
   if (!data) {
     return (
       <main className="loading">
@@ -555,22 +609,65 @@ export function MeritMobile() {
 
   const establishedDimensions = new Set(data.supportForm?.goalsEstablishedDimensions ?? []);
   const goalsEstablished = establishedDimensions.size;
+  const currentDemoProfile = demoProfiles.find((profile) => profile.id === demoProfileId);
+  const homeEyebrow = data.canViewPilotImpact
+    ? "PILOT OVERSIGHT"
+    : data.raterAssignments.length > 0
+      ? "RATER WORKSPACE"
+      : "SUPPORT FORM · FY26";
+  const homeDescription = data.canViewPilotImpact
+    ? "Review aggregate pilot adoption, workflow speed, record quality, and evaluation use."
+    : data.supportForm
+      ? "Capture performance now. Your rater reviews it in MERIT."
+      : "Record direct observations for the Soldiers you rate.";
 
   return (
     <main className="stage">
       <section className="phone" aria-label="MERIT Mobile performance capture">
         <div className="statusbar">
-          <span>9:41</span>
+          {isMobileDemoMode ? (
+            <>
+              <span className="demoBadge">DEMO</span>
+              <button className="demoProfileTrigger" onClick={() => setShowProfileSwitcher(true)} aria-haspopup="dialog">
+                {data.user.rank} {data.user.displayName.split(" ").at(-1)} <span aria-hidden="true">⌄</span>
+              </button>
+            </>
+          ) : <span>9:41</span>}
           <span>●●● 5G ▰</span>
         </div>
+
+        {isMobileDemoMode && showProfileSwitcher && (
+          <div className="demoProfileOverlay" role="dialog" aria-modal="true" aria-labelledby="profileSwitcherTitle">
+            <section className="demoProfileSheet">
+              <header>
+                <div><p className="eyebrow dark">DEMO PROFILE</p><h2 id="profileSwitcherTitle">Switch MERIT view</h2></div>
+                <button onClick={() => setShowProfileSwitcher(false)} aria-label="Close profile selector">×</button>
+              </header>
+              <p className="profileSwitcherHelp">Each profile has separate demo data and mirrors the intended live-pilot access boundaries.</p>
+              <div className="profileSwitcherList">
+                {demoProfiles.map((profile) => {
+                  const active = profile.id === demoProfileId;
+                  return (
+                    <button key={profile.id} className={active ? "active" : ""} onClick={() => void enterDemoProfile(profile.id)} aria-current={active ? "true" : undefined}>
+                      <span className="demoAvatar">{profile.initials}</span>
+                      <span><small>{profile.roleLabel}</small><strong>{profile.rank} {profile.displayName}</strong><em>{profile.accessLabel}</em></span>
+                      <b aria-hidden="true">{active ? "✓" : "›"}</b>
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="returnToLogin" onClick={returnToDemoLogin}>Return to demo sign-in</button>
+            </section>
+          </div>
+        )}
 
         {screen === "home" && (
           <div className="screen">
             <header className="hero">
               <div className="brand"><img src="/army-star.jpg" alt="" /> MERIT</div>
-              <p className="eyebrow">SUPPORT FORM · FY26</p>
+              <p className="eyebrow">{homeEyebrow}</p>
               <h1>Good afternoon,<br />{data.user.rank} {data.user.displayName.split(" ")[1]}.</h1>
-              <p>{data.supportForm ? "Capture performance now. Your rater reviews it in MERIT." : "Record direct observations for the Soldiers you rate."}</p>
+              <p>{homeDescription}</p>
             </header>
             <div className="content overlap">
               {data.supportForm && (
@@ -819,7 +916,7 @@ export function MeritMobile() {
           </div>
         )}
 
-        {screen === "impact" && (
+        {screen === "impact" && data.canViewPilotImpact && data.user.applicationSupportRole === "ADMINISTRATOR" && (
           <div className="screen">
             <Subhead eyebrow="COMMAND PILOT" title="Pilot impact" onBack={() => setScreen("home")} />
             <div className="content impactDashboard">
@@ -903,17 +1000,63 @@ export function MeritMobile() {
       </section>
 
       <aside className="demoNotes">
-        <p className="eyebrow dark">MERIT MOBILE</p>
-        <h2>The capture layer</h2>
-        <p>A focused field workflow that feeds the same support-form record used by the full MERIT platform.</p>
-        <ol>
-          <li>Capture the accomplishment when it happens.</li>
-          <li>Attach a photo or document and disclose discrepancies.</li>
-          <li>Submit immediately with a processing state.</li>
-          <li>Preserve the entry for independent rater review.</li>
-        </ol>
+        <p className="eyebrow dark">{currentDemoProfile?.roleLabel ?? "MERIT MOBILE"}</p>
+        <h2>{currentDemoProfile ? `${currentDemoProfile.rank} ${currentDemoProfile.displayName}` : "The capture layer"}</h2>
+        <p>{currentDemoProfile?.description ?? "A focused field workflow that feeds the same support-form record used by the full MERIT platform."}</p>
+        <ol>{demoViewSteps(demoProfileId).map((step) => <li key={step}>{step}</li>)}</ol>
         <p className="demoMode">Demo mode uses local browser storage. Production mode writes through the authorized MERIT support-form and evidence routes.</p>
       </aside>
+    </main>
+  );
+}
+
+function demoViewSteps(profileId: DemoProfileId | null): string[] {
+  if (profileId === "rater") return [
+    "Choose an assigned Soldier.",
+    "Record a factual leader observation.",
+    "Keep it private until counseling release.",
+  ];
+  if (profileId === "administrator") return [
+    "Open the pilot-wide aggregate.",
+    "Review adoption, speed, and record quality.",
+    "Track records through evaluation use without ranking people.",
+  ];
+  return [
+    "Capture the accomplishment when it happens.",
+    "Attach a photo or document and disclose discrepancies.",
+    "Submit it for independent rater review.",
+  ];
+}
+
+function DemoLogin({ onSelect }: { onSelect: (profileId: DemoProfileId) => void }) {
+  return (
+    <main className="demoLoginStage">
+      <section className="demoLoginCard" aria-labelledby="demoLoginTitle">
+        <div className="demoLoginHeader">
+          <div className="brand"><img src="/army-star.jpg" alt="" /> MERIT</div>
+          <span>INTERACTIVE DEMONSTRATION</span>
+        </div>
+        <div className="demoLoginIntro">
+          <p className="eyebrow dark">MERIT MOBILE</p>
+          <h1 id="demoLoginTitle">Choose a profile</h1>
+          <p>Enter the demonstration as a Soldier, rater, or platform administrator. Each profile shows only its authorized MERIT view.</p>
+        </div>
+        <div className="demoProfileGrid">
+          {demoProfiles.map((profile) => (
+            <button key={profile.id} className="demoProfileCard" onClick={() => onSelect(profile.id)}>
+              <span className="demoAvatar">{profile.initials}</span>
+              <span className="demoProfileCopy">
+                <small>{profile.roleLabel}</small>
+                <strong>{profile.rank} {profile.displayName}</strong>
+                <span>{profile.description}</span>
+                <em className={profile.id === "administrator" ? "hasImpact" : ""}>{profile.accessLabel}</em>
+              </span>
+              <b aria-hidden="true">›</b>
+            </button>
+          ))}
+        </div>
+        <p className="demoDisclosure"><strong>Demo access:</strong> All names and measures shown here are synthetic. No Army account or password is used.</p>
+      </section>
     </main>
   );
 }

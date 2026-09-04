@@ -13,7 +13,8 @@ import {
 } from "./contracts";
 import { getMeritAccessToken } from "./auth";
 
-const STORE_KEY = "ees-mobile-demo-v1";
+const DEMO_PROFILE_KEY = "ees-mobile-demo-profile-v1";
+const STORE_KEY_PREFIX = "ees-mobile-demo-v2";
 const PILOT_EVENT_STORE_KEY = "ees-mobile-pilot-events-v1";
 const API_URL = import.meta.env.VITE_EES_API_URL || "http://localhost:4000";
 
@@ -109,63 +110,168 @@ const seedEntry: PerformanceEntry = {
   submittedBy: "SGT James Davis",
 };
 
-const baseBootstrap: MobileBootstrap = {
-  user: {
-    id: "test-user-davis",
-    displayName: "James Davis",
+export type DemoProfileId = "soldier" | "rater" | "administrator";
+
+export interface DemoProfileOption {
+  id: DemoProfileId;
+  initials: string;
+  rank: string;
+  displayName: string;
+  roleLabel: string;
+  description: string;
+  accessLabel: string;
+}
+
+export const demoProfiles: DemoProfileOption[] = [
+  {
+    id: "soldier",
+    initials: "JD",
     rank: "SGT",
-    roles: ["SOLDIER"],
-    applicationSupportRole: "ADMINISTRATOR",
+    displayName: "James Davis",
+    roleLabel: "Rated Soldier",
+    description: "Capture accomplishments, attach evidence, and review your performance record.",
+    accessLabel: "No pilot-impact access",
   },
-  canViewPilotImpact: true,
-  supportForm: {
-    id: "test-sf-davis-2026",
-    label: `CY${String(DEMO_YEAR).slice(-2)} Support Form`,
-    ratingPeriod: `01 JAN ${DEMO_YEAR} – 31 DEC ${DEMO_YEAR}`,
-    ratingPeriodStart: DEMO_PERIOD_START,
-    ratingPeriodEnd: DEMO_PERIOD_END,
-    status: "ACTIVE",
-    goalsEstablishedDimensions: ["LEADS", "DEVELOPS"],
+  {
+    id: "rater",
+    initials: "MJ",
+    rank: "SSG",
+    displayName: "Marcus Johnson",
+    roleLabel: "Rater",
+    description: "Record direct leader observations for an assigned Soldier.",
+    accessLabel: "No pilot-impact access",
   },
-  goals: [
-    {
-      id: "goal-readiness",
-      title: "Improve platoon training readiness and accountability",
-      sectionKey: "LEADS",
+  {
+    id: "administrator",
+    initials: "PS",
+    rank: "CPT",
+    displayName: "Peter Smith",
+    roleLabel: "Platform Administrator",
+    description: "Review aggregate adoption, speed, record quality, and evaluation use.",
+    accessLabel: "Pilot-impact access",
+  },
+];
+
+const demoGoals: MobileBootstrap["goals"] = [
+  { id: "goal-readiness", title: "Improve platoon training readiness and accountability", sectionKey: "LEADS" },
+  { id: "goal-development", title: "Develop junior Soldiers through monthly coaching", sectionKey: "DEVELOPS" },
+];
+
+const demoBootstrapByProfile: Record<DemoProfileId, MobileBootstrap> = {
+  soldier: {
+    user: {
+      id: "test-user-davis",
+      displayName: "James Davis",
+      rank: "SGT",
+      roles: ["SOLDIER"],
+      applicationSupportRole: "NONE",
     },
-    {
-      id: "goal-development",
-      title: "Develop junior Soldiers through monthly coaching",
-      sectionKey: "DEVELOPS",
+    canViewPilotImpact: false,
+    supportForm: {
+      id: "test-sf-davis-2026",
+      label: `CY${String(DEMO_YEAR).slice(-2)} Support Form`,
+      ratingPeriod: `01 JAN ${DEMO_YEAR} – 31 DEC ${DEMO_YEAR}`,
+      ratingPeriodStart: DEMO_PERIOD_START,
+      ratingPeriodEnd: DEMO_PERIOD_END,
+      status: "ACTIVE",
+      goalsEstablishedDimensions: ["LEADS", "DEVELOPS"],
     },
-  ],
-  entries: [seedEntry],
-  raterAssignments: [],
+    goals: demoGoals,
+    entries: [seedEntry],
+    raterAssignments: [],
+  },
+  rater: {
+    user: {
+      id: "test-user-johnson",
+      displayName: "Marcus Johnson",
+      rank: "SSG",
+      roles: ["SOLDIER", "RATER"],
+      applicationSupportRole: "NONE",
+    },
+    canViewPilotImpact: false,
+    supportForm: null,
+    goals: [],
+    entries: [],
+    raterAssignments: [{
+      supportFormId: "test-sf-davis-2026",
+      soldierId: "test-user-davis",
+      displayName: "James Davis",
+      rank: "SGT",
+      goals: demoGoals.map(({ id, title }) => ({ id, title })),
+    }],
+  },
+  administrator: {
+    user: {
+      id: "test-user-smith",
+      displayName: "Peter Smith",
+      rank: "CPT",
+      roles: ["ADMIN"],
+      applicationSupportRole: "ADMINISTRATOR",
+    },
+    canViewPilotImpact: true,
+    supportForm: null,
+    goals: [],
+    entries: [],
+    raterAssignments: [],
+  },
 };
 
-function readDemoBootstrap(): MobileBootstrap {
-  if (typeof window === "undefined") return baseBootstrap;
-  const raw = window.localStorage.getItem(STORE_KEY);
-  if (!raw) return baseBootstrap;
-  try {
-    const stored = JSON.parse(raw) as Partial<MobileBootstrap>;
-    return {
-      ...baseBootstrap,
-      ...stored,
-      user: { ...baseBootstrap.user, ...stored.user },
-      canViewPilotImpact: stored.canViewPilotImpact ?? baseBootstrap.canViewPilotImpact,
-      supportForm: stored.supportForm === null ? null : { ...baseBootstrap.supportForm!, ...stored.supportForm },
-      goals: stored.goals ?? baseBootstrap.goals,
-      entries: stored.entries ?? baseBootstrap.entries,
-      raterAssignments: stored.raterAssignments ?? [],
-    };
-  } catch {
-    return baseBootstrap;
+for (const [profileId, bootstrap] of Object.entries(demoBootstrapByProfile)) {
+  const isAdministrator = bootstrap.user.applicationSupportRole === "ADMINISTRATOR";
+  if (bootstrap.canViewPilotImpact !== isAdministrator) {
+    throw new Error(`Demo profile ${profileId} has inconsistent pilot-impact access.`);
   }
 }
 
+function cloneBootstrap(data: MobileBootstrap): MobileBootstrap {
+  return JSON.parse(JSON.stringify(data)) as MobileBootstrap;
+}
+
+export function readSelectedDemoProfileId(): DemoProfileId | null {
+  if (typeof window === "undefined") return null;
+  const candidate = window.localStorage.getItem(DEMO_PROFILE_KEY);
+  return demoProfiles.some((profile) => profile.id === candidate) ? candidate as DemoProfileId : null;
+}
+
+export function selectDemoProfile(profileId: DemoProfileId): void {
+  window.localStorage.setItem(DEMO_PROFILE_KEY, profileId);
+}
+
+export function clearSelectedDemoProfile(): void {
+  window.localStorage.removeItem(DEMO_PROFILE_KEY);
+}
+
+function readDemoBootstrapForProfile(profileId: DemoProfileId): MobileBootstrap {
+  const base = cloneBootstrap(demoBootstrapByProfile[profileId]);
+  const raw = window.localStorage.getItem(`${STORE_KEY_PREFIX}:${profileId}`);
+  if (!raw) return base;
+  try {
+    const stored = JSON.parse(raw) as Partial<MobileBootstrap>;
+    return {
+      ...base,
+      ...stored,
+      user: base.user,
+      canViewPilotImpact: base.canViewPilotImpact,
+      supportForm: stored.supportForm === null || base.supportForm === null ? null : { ...base.supportForm, ...stored.supportForm },
+      goals: stored.goals ?? base.goals,
+      entries: stored.entries ?? base.entries,
+      raterAssignments: base.raterAssignments,
+    };
+  } catch {
+    return base;
+  }
+}
+
+function readDemoBootstrap(): MobileBootstrap {
+  const profileId = readSelectedDemoProfileId();
+  if (!profileId) throw new Error("Choose a demo profile to continue.");
+  return readDemoBootstrapForProfile(profileId);
+}
+
 function writeDemoBootstrap(data: MobileBootstrap) {
-  window.localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  const profileId = readSelectedDemoProfileId();
+  if (!profileId) throw new Error("Choose a demo profile to continue.");
+  window.localStorage.setItem(`${STORE_KEY_PREFIX}:${profileId}`, JSON.stringify(data));
 }
 
 async function createDemoEntry(draft: CaptureDraft): Promise<PerformanceEntry> {
@@ -247,10 +353,11 @@ function readDemoPilotEvents(): StoredPilotEvent[] {
 }
 
 function demoPilotSummary(days = 30): PilotKpiSummary {
-  const data = readDemoBootstrap();
+  const data = readDemoBootstrapForProfile("soldier");
   const events = readDemoPilotEvents();
   const localWorkflows = new Set(events.map((event) => event.workflowId)).size;
   const localCompletions = events.filter((event) => event.eventType === "WORKFLOW_COMPLETED");
+  const localRaterCompletions = localCompletions.filter((event) => event.workflowType === "RATER_OBSERVATION").length;
   const newEntries = Math.max(0, data.entries.length - 1);
   const through = new Date();
   const since = new Date(through.getTime() - days * 24 * 60 * 60 * 1000);
@@ -265,7 +372,7 @@ function demoPilotSummary(days = 30): PilotKpiSummary {
       records: records + (index === weeklyBase.length - 1 ? newEntries : 0),
     };
   });
-  const mobileRecords = 112 + newEntries;
+  const mobileRecords = 112 + newEntries + localRaterCompletions;
   return {
     dataStatus: "SYNTHETIC_DEMO",
     pilotId: "MERIT_MOBILE_PILOT",
@@ -292,7 +399,7 @@ function demoPilotSummary(days = 30): PilotKpiSummary {
     outcomes: {
       mobileRecords,
       soldierEntries: 83 + newEntries,
-      raterObservations: 29,
+      raterObservations: 29 + localRaterCompletions,
       reviewedRecords: 78,
       usedInEvaluation: 18,
       releasedObservations: 16,
@@ -363,8 +470,12 @@ const demoGateway: EesGateway = {
     data.entries = data.entries.filter((item) => item.id !== entry.id);
     writeDemoBootstrap(data);
   },
-  async createObservation() {
-    throw new Error("This demo identity is a rated Soldier. Sign in as an assigned rater to record leader observations.");
+  async createObservation(draft) {
+    const data = readDemoBootstrap();
+    const assigned = data.raterAssignments.some((assignment) => assignment.supportFormId === draft.supportFormId);
+    if (!data.user.roles.includes("RATER") || !assigned) {
+      throw new Error("Only the assigned rater can record this leader observation.");
+    }
   },
   async trackPilotEvent(event) {
     const events = readDemoPilotEvents();
@@ -374,6 +485,10 @@ const demoGateway: EesGateway = {
     window.localStorage.setItem(PILOT_EVENT_STORE_KEY, JSON.stringify(events.slice(-500)));
   },
   async pilotSummary(days = 30) {
+    const data = readDemoBootstrap();
+    if (!data.canViewPilotImpact || data.user.applicationSupportRole !== "ADMINISTRATOR") {
+      throw new Error("Pilot impact requires platform-administrator access.");
+    }
     return demoPilotSummary(days);
   },
 };
